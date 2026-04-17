@@ -677,35 +677,47 @@
     
     // ==================== دوال تسجيل الدخول ====================
     async function checkIdentifier() {
-        const identifier = document.getElementById('loginIdentifier').value.trim();
-        if (!identifier) {
-            showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
+    const identifier = document.getElementById('loginIdentifier').value.trim();
+    
+    if (!identifier) {
+        showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
+        return;
+    }
+    
+    try {
+        // محاولة قراءة البيانات مع معالجة الخطأ
+        const snap = await db.ref('users').once('value');
+        
+        if (!snap.exists()) {
+            showMessage('لا يوجد حسابات مسجلة', true);
             return;
         }
-        try {
-            const snap = await db.ref('users').once('value');
-            let foundUser = null;
-            if (snap.val()) {
-                for (let uid in snap.val()) {
-                    const user = snap.val()[uid];
-                    if (user.phone === identifier || user.username === identifier || 
-                        (identifier.includes('@') && user.username === identifier)) {
-                        foundUser = { uid, ...user };
-                        break;
-                    }
-                }
+        
+        let foundUser = null;
+        
+        for (let uid in snap.val()) {
+            const user = snap.val()[uid];
+            if (user.phone === identifier || user.username === identifier || 
+                (identifier.includes('@') && user.username === identifier)) {
+                foundUser = { uid, ...user };
+                break;
             }
-            if (!foundUser) {
-                showMessage('لا يوجد حساب بهذه البيانات', true);
-                return;
-            }
-            resetUserData = foundUser;
-            currentStep = 'reset';
-            render();
-        } catch (error) {
-            showMessage('حدث خطأ', true);
         }
+        
+        if (!foundUser) {
+            showMessage('لا يوجد حساب بهذه البيانات', true);
+            return;
+        }
+        
+        resetUserData = foundUser;
+        currentStep = 'reset';
+        render();
+        
+    } catch (error) {
+        console.error('خطأ في التحقق:', error);
+        showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
     }
+}
     
     function goToLogin() {
         currentStep = 'login';

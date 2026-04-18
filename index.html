@@ -50,6 +50,10 @@
             transition: transform 0.3s ease;
         }
         
+        .login-card:hover {
+            transform: translateY(-5px);
+        }
+        
         .lang-switch {
             position: fixed;
             top: 20px;
@@ -393,22 +397,32 @@
 <div id="toast" class="toast"></div>
 
 <script>
-    // ==================== Firebase Config ====================
-    const firebaseConfig = {
-        apiKey: "AIzaSyDLndo0o-Bf67Sw8_n84pM-__ErB3SuTx4",
-        authDomain: "tecno-shark.firebaseapp.com",
-        projectId: "tecno-shark",
-        storageBucket: "tecno-shark.firebasestorage.app",
-        messagingSenderId: "536495831614",
-        appId: "1:536495831614:web:e113969218666828496f6f",
-        measurementId: "G-ECZYM05D0S"
+    // ==================== إعدادات المواقع ====================
+    let currentSiteId = null;
+    let currentSiteConfig = null;
+    
+    const sitesConfig = {
+        'nabd-wabsaite': {
+            apiKey: "AIzaSyA0avNIZ0RDxSrZx0IvYmLJ_z_-TUfKVzw",
+            authDomain: "mindful-marking-493119-d0.firebaseapp.com",
+            projectId: "mindful-marking-493119-d0",
+            storageBucket: "mindful-marking-493119-d0.firebasestorage.app",
+            messagingSenderId: "501314955450",
+            appId: "1:501314955450:web:9cb078d957e3d8db71fa83",
+            databaseURL: "https://mindful-marking-493119-d0-default-rtdb.firebaseio.com/"
+        },
+        'tecno-shark': {
+            apiKey: "AIzaSyDLndo0o-Bf67Sw8_n84pM-__ErB3SuTx4",
+            authDomain: "tecno-shark.firebaseapp.com",
+            projectId: "tecno-shark",
+            storageBucket: "tecno-shark.firebasestorage.app",
+            messagingSenderId: "536495831614",
+            appId: "1:536495831614:web:e113969218666828496f6f",
+            databaseURL: "https://tecno-shark-default-rtdb.firebaseio.com/"
+        }
     };
     
-    firebase.initializeApp(firebaseConfig);
-    const auth = firebase.auth();
-    const db = firebase.database();
-    
-    // ==================== المتغيرات ====================
+    // ==================== المتغيرات العامة ====================
     let currentStep = 'login';
     let currentLang = 'ar';
     let tempUserData = {
@@ -419,6 +433,8 @@
         password: ''
     };
     let resetUserData = null;
+    let auth = null;
+    let db = null;
     
     // ==================== دوال مساعدة ====================
     function showToast(msg) {
@@ -439,6 +455,59 @@
         }
     }
     
+    function maskUsername(username) {
+        if (!username) return '';
+        if (username.length <= 4) return username;
+        return username.substring(0, 2) + '***' + username.substring(username.length - 2);
+    }
+    
+    // ==================== دوال رابط العودة ====================
+    function getReturnUrl() {
+        const urlParams = new URLSearchParams(window.location.search);
+        let returnUrl = urlParams.get('returnUrl');
+        let siteId = urlParams.get('site');
+        
+        if (!returnUrl && document.referrer) {
+            returnUrl = document.referrer;
+            const match = returnUrl.match(/https:\/\/[^\/]+\/([^\/]+)/);
+            if (match) siteId = match[1];
+        }
+        
+        if (!returnUrl) {
+            returnUrl = 'https://mohamedemadmaxplas.github.io/nabd-wabsaite/';
+            siteId = 'nabd-wabsaite';
+        }
+        
+        currentSiteId = siteId;
+        localStorage.setItem('tecno_current_site', siteId);
+        localStorage.setItem('tecno_return_url', returnUrl);
+        
+        return returnUrl;
+    }
+    
+    // ==================== دوال Firebase ====================
+    async function initFirebaseForSite() {
+        const siteId = currentSiteId || localStorage.getItem('tecno_current_site') || 'nabd-wabsaite';
+        const config = sitesConfig[siteId];
+        
+        if (!config) {
+            console.error('موقع غير معروف:', siteId);
+            return false;
+        }
+        
+        currentSiteConfig = config;
+        
+        if (firebase.apps.length) {
+            await firebase.app().delete();
+        }
+        
+        firebase.initializeApp(config);
+        auth = firebase.auth();
+        db = firebase.database();
+        
+        return true;
+    }
+    
     // ==================== الترجمة ====================
     function switchLanguage() {
         if (currentLang === 'ar') {
@@ -454,6 +523,354 @@
     }
     
     document.getElementById('langSwitch').addEventListener('click', switchLanguage);
+    
+    // ==================== دوال تسجيل الدخول ====================
+    async function checkIdentifier() {
+        const identifier = document.getElementById('loginIdentifier').value.trim();
+        
+        if (!identifier) {
+            showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
+            return;
+        }
+        
+        try {
+            const snap = await db.ref('users').once('value');
+            
+            if (!snap.exists()) {
+                showMessage('لا يوجد حسابات مسجلة', true);
+                return;
+            }
+            
+            let foundUser = null;
+            
+            for (let uid in snap.val()) {
+                const user = snap.val()[uid];
+                if (user.phone === identifier || user.username === identifier || 
+                    (identifier.includes('@') && user.username === identifier)) {
+                    foundUser = { uid, ...user };
+                    break;
+                }
+            }
+            
+            if (!foundUser) {
+                showMessage('لا يوجد حساب بهذه البيانات', true);
+                return;
+            }
+            
+            resetUserData = foundUser;
+            currentStep = 'reset';
+            render();
+            
+        } catch (error) {
+            console.error('خطأ في التحقق:', error);
+            showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
+        }
+    }
+    
+    function goToLogin() {
+        currentStep = 'login';
+        render();
+    }
+    
+    function goToForgot() {
+        currentStep = 'forgot';
+        render();
+    }
+    
+    async function tecnoLogin() {
+        let username = document.getElementById('tecnoUser')?.value.trim();
+        const password = document.getElementById('tecnoPass')?.value;
+        
+        if (!username || !password) {
+            showMessage('الرجاء إدخال اسم المستخدم وكلمة المرور', true);
+            return;
+        }
+        
+        username = username.replace(/@tecno\.shark$/i, '');
+        let clean = username + '@tecno.shark';
+        const email = clean.split('@')[0] + '@' + currentSiteId + '.com';
+        
+        try {
+            const snap = await db.ref('users').once('value');
+            let found = null;
+            
+            if (snap.val()) {
+                for (let id in snap.val()) {
+                    const storedUsername = snap.val()[id].username;
+                    const storedClean = storedUsername.replace(/@tecno\.shark$/i, '');
+                    if (storedClean === username && snap.val()[id].siteId === currentSiteId) {
+                        found = snap.val()[id];
+                        break;
+                    }
+                }
+            }
+            
+            if (!found || found.password !== password) {
+                showMessage('اسم المستخدم أو كلمة المرور غير صحيحة', true);
+                return;
+            }
+            
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+            } catch {
+                await auth.createUserWithEmailAndPassword(email, password);
+            }
+            
+            await db.ref(`users/${auth.currentUser.uid}`).set(found);
+            
+            const returnUrl = getReturnUrl();
+            showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
+            
+            setTimeout(() => {
+                window.location.href = returnUrl;
+            }, 1500);
+            
+        } catch (error) {
+            console.error(error);
+            showMessage('حدث خطأ في تسجيل الدخول: ' + error.message, true);
+        }
+    }
+    
+    // ==================== دوال استعادة كلمة المرور ====================
+    async function verifyPhone() {
+        const phone = document.getElementById('forgotPhone').value.trim();
+        if (!phone) {
+            showMessage('الرجاء إدخال رقم الهاتف', true);
+            return;
+        }
+        try {
+            const snap = await db.ref('users').once('value');
+            let foundUser = null;
+            if (snap.val()) {
+                for (let uid in snap.val()) {
+                    if (snap.val()[uid].phone === phone) {
+                        foundUser = { uid, ...snap.val()[uid] };
+                        break;
+                    }
+                }
+            }
+            if (!foundUser) {
+                showMessage('لا يوجد حساب بهذا الرقم', true);
+                return;
+            }
+            resetUserData = foundUser;
+            currentStep = 'reset';
+            render();
+        } catch (error) {
+            showMessage('حدث خطأ', true);
+        }
+    }
+    
+    async function resetPassword() {
+        const newPass = document.getElementById('newPassword').value;
+        const confirmPass = document.getElementById('confirmPassword').value;
+        if (!newPass || !confirmPass) {
+            showMessage('الرجاء إدخال كلمة المرور', true);
+            return;
+        }
+        if (newPass !== confirmPass) {
+            showMessage('كلمة المرور غير متطابقة', true);
+            return;
+        }
+        if (newPass.length < 6) {
+            showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
+            return;
+        }
+        if (!resetUserData) {
+            showMessage('حدث خطأ، حاول مرة أخرى', true);
+            return;
+        }
+        try {
+            await db.ref(`users/${resetUserData.uid}/password`).set(newPass);
+            const email = resetUserData.email;
+            try {
+                await auth.signInWithEmailAndPassword(email, newPass);
+            } catch {
+                await auth.createUserWithEmailAndPassword(email, newPass);
+            }
+            
+            const returnUrl = getReturnUrl();
+            showMessage('✅ تم تغيير كلمة المرور بنجاح! جاري التحويل...', false);
+            
+            setTimeout(() => {
+                window.location.href = returnUrl;
+            }, 1500);
+            
+        } catch (error) {
+            showMessage('حدث خطأ', true);
+        }
+    }
+    
+    // ==================== دوال إنشاء حساب ====================
+    function goToRegister() {
+        tempUserData = { firstName: '', lastName: '', phone: '', username: '', password: '' };
+        currentStep = 'register-step1';
+        render();
+    }
+    
+    function goToRegisterStep1() {
+        currentStep = 'register-step1';
+        render();
+    }
+    
+    function goToRegisterStep2() {
+        const firstName = document.getElementById('firstName')?.value.trim();
+        const lastName = document.getElementById('lastName')?.value.trim();
+        if (!firstName || !lastName) {
+            showMessage('الرجاء إدخال الاسم الأول والاسم الأخير', true);
+            return;
+        }
+        tempUserData.firstName = firstName;
+        tempUserData.lastName = lastName;
+        currentStep = 'register-step2';
+        render();
+    }
+    
+    function goToRegisterStep3() {
+        const phone = document.getElementById('phone')?.value.trim();
+        if (!phone) {
+            showMessage('الرجاء إدخال رقم الهاتف', true);
+            return;
+        }
+        if (phone.length < 10) {
+            showMessage('رقم الهاتف غير صحيح', true);
+            return;
+        }
+        tempUserData.phone = phone;
+        currentStep = 'register-step3';
+        render();
+    }
+    
+    async function checkUsernameAvailability() {
+        const usernameInput = document.getElementById('username');
+        const username = usernameInput?.value.trim();
+        const errorDiv = document.getElementById('usernameError');
+        const nextBtn = document.getElementById('nextBtn3');
+        const suggestionsDiv = document.getElementById('suggestions');
+        
+        if (!username || username.length < 3) {
+            if (errorDiv) errorDiv.style.display = 'none';
+            if (nextBtn) nextBtn.disabled = true;
+            if (suggestionsDiv) suggestionsDiv.innerHTML = '';
+            return;
+        }
+        
+        const fullUsername = username + '@tecno.shark';
+        const snap = await db.ref('users').once('value');
+        let exists = false;
+        
+        if (snap.val()) {
+            for (let uid in snap.val()) {
+                if (snap.val()[uid].username === fullUsername) {
+                    exists = true;
+                    break;
+                }
+            }
+        }
+        
+        if (exists) {
+            if (errorDiv) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = '⚠️ اسم المستخدم موجود بالفعل';
+            }
+            if (nextBtn) nextBtn.disabled = true;
+            
+            const suggestions = [
+                username + Math.floor(Math.random() * 100),
+                username + '_' + Math.floor(Math.random() * 1000),
+                username + new Date().getFullYear(),
+                username + '_official'
+            ];
+            
+            if (suggestionsDiv) {
+                suggestionsDiv.innerHTML = suggestions.map(s => 
+                    `<span class="suggestion-badge" onclick="useSuggestion('${s}')">${s}@tecno.shark</span>`
+                ).join('');
+            }
+        } else {
+            if (errorDiv) errorDiv.style.display = 'none';
+            if (nextBtn) nextBtn.disabled = false;
+            if (suggestionsDiv) suggestionsDiv.innerHTML = '';
+        }
+    }
+    
+    function useSuggestion(suggestion) {
+        const usernameInput = document.getElementById('username');
+        if (usernameInput) {
+            usernameInput.value = suggestion;
+            checkUsernameAvailability();
+        }
+    }
+    
+    function goToRegisterStep4() {
+        const username = document.getElementById('username')?.value.trim();
+        if (!username) {
+            showMessage('الرجاء إدخال اسم المستخدم', true);
+            return;
+        }
+        if (username.length < 3) {
+            showMessage('اسم المستخدم يجب أن يكون 3 أحرف على الأقل', true);
+            return;
+        }
+        tempUserData.username = username + '@tecno.shark';
+        currentStep = 'register-step4';
+        render();
+    }
+    
+    function goToTerms() {
+        const password = document.getElementById('password')?.value;
+        const confirmPassword = document.getElementById('confirmPassword')?.value;
+        if (!password) {
+            showMessage('الرجاء إدخال كلمة المرور', true);
+            return;
+        }
+        if (password !== confirmPassword) {
+            showMessage('كلمة المرور غير متطابقة', true);
+            return;
+        }
+        if (password.length < 6) {
+            showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
+            return;
+        }
+        tempUserData.password = password;
+        currentStep = 'register-terms';
+        render();
+    }
+    
+    async function completeRegistration() {
+        const email = tempUserData.username.split('@')[0] + '@' + currentSiteId + '.com';
+        
+        try {
+            const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
+            const firebaseUser = userCred.user;
+            
+            const newUser = {
+                name: tempUserData.firstName + ' ' + tempUserData.lastName,
+                firstName: tempUserData.firstName,
+                lastName: tempUserData.lastName,
+                phone: tempUserData.phone,
+                username: tempUserData.username,
+                email: email,
+                password: tempUserData.password,
+                plan: 'free',
+                siteId: currentSiteId,
+                createdAt: new Date().toISOString()
+            };
+            
+            await db.ref(`users/${firebaseUser.uid}`).set(newUser);
+            await auth.signInWithEmailAndPassword(email, tempUserData.password);
+            
+            const returnUrl = getReturnUrl();
+            showMessage('✅ تم إنشاء الحساب بنجاح! جاري التحويل...', false);
+            
+            setTimeout(() => {
+                window.location.href = returnUrl;
+            }, 2000);
+            
+        } catch (error) {
+            showMessage('حدث خطأ: ' + error.message, true);
+        }
+    }
     
     // ==================== عرض الصفحات ====================
     function render() {
@@ -666,7 +1083,6 @@
             `;
         }
         
-        // إضافة Font Awesome
         if (!document.querySelector('link[href*="font-awesome"]')) {
             const link = document.createElement('link');
             link.rel = 'stylesheet';
@@ -675,390 +1091,12 @@
         }
     }
     
-    // ==================== دوال تسجيل الدخول ====================
-    async function checkIdentifier() {
-    const identifier = document.getElementById('loginIdentifier').value.trim();
-    
-    if (!identifier) {
-        showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
-        return;
-    }
-    
-    try {
-        // محاولة قراءة البيانات مع معالجة الخطأ
-        const snap = await db.ref('users').once('value');
-        
-        if (!snap.exists()) {
-            showMessage('لا يوجد حسابات مسجلة', true);
-            return;
-        }
-        
-        let foundUser = null;
-        
-        for (let uid in snap.val()) {
-            const user = snap.val()[uid];
-            if (user.phone === identifier || user.username === identifier || 
-                (identifier.includes('@') && user.username === identifier)) {
-                foundUser = { uid, ...user };
-                break;
-            }
-        }
-        
-        if (!foundUser) {
-            showMessage('لا يوجد حساب بهذه البيانات', true);
-            return;
-        }
-        
-        resetUserData = foundUser;
-        currentStep = 'reset';
-        render();
-        
-    } catch (error) {
-        console.error('خطأ في التحقق:', error);
-        showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
-    }
-}
-    
-    function goToLogin() {
-        currentStep = 'login';
-        render();
-    }
-    
-    function goToForgot() {
-        currentStep = 'forgot';
-        render();
-    }
-    
-    // ==================== دوال استعادة كلمة المرور ====================
-    async function verifyPhone() {
-        const phone = document.getElementById('forgotPhone').value.trim();
-        if (!phone) {
-            showMessage('الرجاء إدخال رقم الهاتف', true);
-            return;
-        }
-        try {
-            const snap = await db.ref('users').once('value');
-            let foundUser = null;
-            if (snap.val()) {
-                for (let uid in snap.val()) {
-                    if (snap.val()[uid].phone === phone) {
-                        foundUser = { uid, ...snap.val()[uid] };
-                        break;
-                    }
-                }
-            }
-            if (!foundUser) {
-                showMessage('لا يوجد حساب بهذا الرقم', true);
-                return;
-            }
-            resetUserData = foundUser;
-            currentStep = 'reset';
-            render();
-        } catch (error) {
-            showMessage('حدث خطأ', true);
-        }
-    }
-    
-   async function resetPassword() {
-    const newPass = document.getElementById('newPassword').value;
-    const confirmPass = document.getElementById('confirmPassword').value;
-    if (!newPass || !confirmPass) {
-        showMessage('الرجاء إدخال كلمة المرور', true);
-        return;
-    }
-    if (newPass !== confirmPass) {
-        showMessage('كلمة المرور غير متطابقة', true);
-        return;
-    }
-    if (newPass.length < 6) {
-        showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
-        return;
-    }
-    if (!resetUserData) {
-        showMessage('حدث خطأ، حاول مرة أخرى', true);
-        return;
-    }
-    try {
-        await db.ref(`users/${resetTargetUser.uid}/password`).set(newPass);
-        const email = resetUserData.email;
-        try {
-            await auth.signInWithEmailAndPassword(email, newPass);
-        } catch {
-            await auth.createUserWithEmailAndPassword(email, newPass);
-        }
-        
-        // الحصول على رابط العودة
-        const returnUrl = getReturnUrl();
-        
-        showMessage('✅ تم تغيير كلمة المرور بنجاح! جاري التحويل...', false);
-        
-        setTimeout(() => {
-            window.location.href = returnUrl;
-        }, 1500);
-        
-    } catch (error) {
-        showMessage('حدث خطأ', true);
-    }
-}
-    
-    function maskUsername(username) {
-        if (!username) return '';
-        if (username.length <= 4) return username;
-        return username.substring(0, 2) + '***' + username.substring(username.length - 2);
-    }
-    
-    // ==================== دوال إنشاء حساب ====================
-    function goToRegister() {
-        tempUserData = { firstName: '', lastName: '', phone: '', username: '', password: '' };
-        currentStep = 'register-step1';
-        render();
-    }
-    
-    function goToRegisterStep1() {
-        currentStep = 'register-step1';
-        render();
-    }
-    
-    function goToRegisterStep2() {
-        const firstName = document.getElementById('firstName')?.value.trim();
-        const lastName = document.getElementById('lastName')?.value.trim();
-        if (!firstName || !lastName) {
-            showMessage('الرجاء إدخال الاسم الأول والاسم الأخير', true);
-            return;
-        }
-        tempUserData.firstName = firstName;
-        tempUserData.lastName = lastName;
-        currentStep = 'register-step2';
-        render();
-    }
-    
-    function goToRegisterStep3() {
-        const phone = document.getElementById('phone')?.value.trim();
-        if (!phone) {
-            showMessage('الرجاء إدخال رقم الهاتف', true);
-            return;
-        }
-        if (phone.length < 10) {
-            showMessage('رقم الهاتف غير صحيح', true);
-            return;
-        }
-        tempUserData.phone = phone;
-        currentStep = 'register-step3';
-        render();
-    }
-    
-    async function checkUsernameAvailability() {
-        const usernameInput = document.getElementById('username');
-        const username = usernameInput?.value.trim();
-        const errorDiv = document.getElementById('usernameError');
-        const nextBtn = document.getElementById('nextBtn3');
-        const suggestionsDiv = document.getElementById('suggestions');
-        
-        if (!username || username.length < 3) {
-            if (errorDiv) errorDiv.style.display = 'none';
-            if (nextBtn) nextBtn.disabled = true;
-            if (suggestionsDiv) suggestionsDiv.innerHTML = '';
-            return;
-        }
-        
-        const fullUsername = username + '@tecno.shark';
-        const snap = await db.ref('users').once('value');
-        let exists = false;
-        
-        if (snap.val()) {
-            for (let uid in snap.val()) {
-                if (snap.val()[uid].username === fullUsername) {
-                    exists = true;
-                    break;
-                }
-            }
-        }
-        
-        if (exists) {
-            if (errorDiv) {
-                errorDiv.style.display = 'block';
-                errorDiv.textContent = '⚠️ اسم المستخدم موجود بالفعل';
-            }
-            if (nextBtn) nextBtn.disabled = true;
-            
-            const suggestions = [
-                username + Math.floor(Math.random() * 100),
-                username + '_' + Math.floor(Math.random() * 1000),
-                username + new Date().getFullYear(),
-                username + '_official'
-            ];
-            
-            if (suggestionsDiv) {
-                suggestionsDiv.innerHTML = suggestions.map(s => 
-                    `<span class="suggestion-badge" onclick="useSuggestion('${s}')">${s}@tecno.shark</span>`
-                ).join('');
-            }
-        } else {
-            if (errorDiv) errorDiv.style.display = 'none';
-            if (nextBtn) nextBtn.disabled = false;
-            if (suggestionsDiv) suggestionsDiv.innerHTML = '';
-        }
-    }
-    
-    function useSuggestion(suggestion) {
-        const usernameInput = document.getElementById('username');
-        if (usernameInput) {
-            usernameInput.value = suggestion;
-            checkUsernameAvailability();
-        }
-    }
-    
-    function goToRegisterStep4() {
-        const username = document.getElementById('username')?.value.trim();
-        if (!username) {
-            showMessage('الرجاء إدخال اسم المستخدم', true);
-            return;
-        }
-        if (username.length < 3) {
-            showMessage('اسم المستخدم يجب أن يكون 3 أحرف على الأقل', true);
-            return;
-        }
-        tempUserData.username = username + '@tecno.shark';
-        currentStep = 'register-step4';
-        render();
-    }
-    
-    function goToTerms() {
-        const password = document.getElementById('password')?.value;
-        const confirmPassword = document.getElementById('confirmPassword')?.value;
-        if (!password) {
-            showMessage('الرجاء إدخال كلمة المرور', true);
-            return;
-        }
-        if (password !== confirmPassword) {
-            showMessage('كلمة المرور غير متطابقة', true);
-            return;
-        }
-        if (password.length < 6) {
-            showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
-            return;
-        }
-        tempUserData.password = password;
-        currentStep = 'register-terms';
-        render();
-    }
-    
-  async function completeRegistration() {
-    const email = tempUserData.username.split('@')[0] + '@examhub.com';
-    try {
-        const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
-        const firebaseUser = userCred.user;
-        const newUser = {
-            name: tempUserData.firstName + ' ' + tempUserData.lastName,
-            firstName: tempUserData.firstName,
-            lastName: tempUserData.lastName,
-            phone: tempUserData.phone,
-            username: tempUserData.username,
-            email: email,
-            password: tempUserData.password,
-            plan: 'free',
-            createdAt: new Date().toISOString()
-        };
-        await db.ref(`users/${firebaseUser.uid}`).set(newUser);
-        
-        // تسجيل الدخول تلقائياً
-        await auth.signInWithEmailAndPassword(email, tempUserData.password);
-        
-        // الحصول على رابط العودة
-        const returnUrl = getReturnUrl();
-        
-        showMessage('✅ تم إنشاء الحساب بنجاح! جاري التحويل...', false);
-        
-        setTimeout(() => {
-            window.location.href = returnUrl;
-        }, 2000);
-        
-    } catch (error) {
-        showMessage('حدث خطأ: ' + error.message, true);
-    }
-}
-    // ==================== الحصول على رابط العودة ====================
-function getReturnUrl() {
-    // 1. التحقق من وجود parameter في الرابط
-    const urlParams = new URLSearchParams(window.location.search);
-    let returnUrl = urlParams.get('returnUrl');
-    
-    // 2. إذا لم يوجد، التحقق من localStorage
-    if (!returnUrl) {
-        returnUrl = localStorage.getItem('tecno_return_url');
-    }
-    
-    // 3. إذا لم يوجد، التحقق من document.referrer (الموقع الذي جاء منه المستخدم)
-    if (!returnUrl && document.referrer) {
-        returnUrl = document.referrer;
-    }
-    
-    // 4. إذا لم يوجد، استخدم الموقع الافتراضي
-    if (!returnUrl) {
-        returnUrl = 'https://mohamedemadmaxplas.github.io/nabd-wabsaite/';
-    }
-    
-    return returnUrl;
-}
-async function tecnoLogin() {
-    const username = document.getElementById('tecnoUser')?.value.trim();
-    const password = document.getElementById('tecnoPass')?.value;
-    
-    if (!username || !password) {
-        showMessage('الرجاء إدخال اسم المستخدم وكلمة المرور', true);
-        return;
-    }
-    
-    let clean = username.includes('@') ? username : username + '@tecno.shark';
-    
-    try {
-        const snap = await db.ref('users').once('value');
-        let found = null;
-        let foundId = null;
-        
-        if (snap.val()) {
-            for (let id in snap.val()) {
-                if (snap.val()[id].username === clean) {
-                    found = snap.val()[id];
-                    foundId = id;
-                    break;
-                }
-            }
-        }
-        
-        if (!found || found.password !== password) {
-            showMessage('اسم المستخدم أو كلمة المرور غير صحيحة', true);
-            return;
-        }
-        
-        const email = clean.split('@')[0] + '@examhub.com';
-        
-        try {
-            await auth.signInWithEmailAndPassword(email, password);
-        } catch {
-            await auth.createUserWithEmailAndPassword(email, password);
-        }
-        
-        await db.ref(`users/${auth.currentUser.uid}`).set(found);
-        
-        // الحصول على رابط العودة
-        const returnUrl = getReturnUrl();
-        
-        showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
-        
-        setTimeout(() => {
-            window.location.href = returnUrl;
-        }, 1500);
-        
-    } catch (error) {
-        console.error(error);
-        showMessage('حدث خطأ في تسجيل الدخول: ' + error.message, true);
-    }
-}
-// حفظ رابط العودة عند تحميل الصفحة
-localStorage.setItem('tecno_return_url', getReturnUrl());
     // ==================== بدء التشغيل ====================
-    render();
+    (async function() {
+        getReturnUrl();
+        await initFirebaseForSite();
+        render();
+    })();
 </script>
 </body>
 </html>

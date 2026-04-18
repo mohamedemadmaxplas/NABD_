@@ -759,41 +759,47 @@
         }
     }
     
-    async function resetPassword() {
-        const newPass = document.getElementById('newPassword').value;
-        const confirmPass = document.getElementById('confirmPassword').value;
-        if (!newPass || !confirmPass) {
-            showMessage('الرجاء إدخال كلمة المرور', true);
-            return;
-        }
-        if (newPass !== confirmPass) {
-            showMessage('كلمة المرور غير متطابقة', true);
-            return;
-        }
-        if (newPass.length < 6) {
-            showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
-            return;
-        }
-        if (!resetUserData) {
-            showMessage('حدث خطأ، حاول مرة أخرى', true);
-            return;
-        }
-        try {
-            await db.ref(`users/${resetUserData.uid}/password`).set(newPass);
-            const email = resetUserData.email;
-            try {
-                await auth.signInWithEmailAndPassword(email, newPass);
-            } catch {
-                await auth.createUserWithEmailAndPassword(email, newPass);
-            }
-            showMessage('✅ تم تغيير كلمة المرور بنجاح!', false);
-            setTimeout(() => {
-                window.location.href = 'https://mohamedemadmaxplas.github.io/nabd-wabsaite/';
-            }, 1500);
-        } catch (error) {
-            showMessage('حدث خطأ', true);
-        }
+   async function resetPassword() {
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+    if (!newPass || !confirmPass) {
+        showMessage('الرجاء إدخال كلمة المرور', true);
+        return;
     }
+    if (newPass !== confirmPass) {
+        showMessage('كلمة المرور غير متطابقة', true);
+        return;
+    }
+    if (newPass.length < 6) {
+        showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
+        return;
+    }
+    if (!resetUserData) {
+        showMessage('حدث خطأ، حاول مرة أخرى', true);
+        return;
+    }
+    try {
+        await db.ref(`users/${resetTargetUser.uid}/password`).set(newPass);
+        const email = resetUserData.email;
+        try {
+            await auth.signInWithEmailAndPassword(email, newPass);
+        } catch {
+            await auth.createUserWithEmailAndPassword(email, newPass);
+        }
+        
+        // الحصول على رابط العودة
+        const returnUrl = getReturnUrl();
+        
+        showMessage('✅ تم تغيير كلمة المرور بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = returnUrl;
+        }, 1500);
+        
+    } catch (error) {
+        showMessage('حدث خطأ', true);
+    }
+}
     
     function maskUsername(username) {
         if (!username) return '';
@@ -937,32 +943,120 @@
         render();
     }
     
-    async function completeRegistration() {
-        const email = tempUserData.username.split('@')[0] + '@examhub.com';
-        try {
-            const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
-            const firebaseUser = userCred.user;
-            const newUser = {
-                name: tempUserData.firstName + ' ' + tempUserData.lastName,
-                firstName: tempUserData.firstName,
-                lastName: tempUserData.lastName,
-                phone: tempUserData.phone,
-                username: tempUserData.username,
-                email: email,
-                password: tempUserData.password,
-                plan: 'free',
-                createdAt: new Date().toISOString()
-            };
-            await db.ref(`users/${firebaseUser.uid}`).set(newUser);
-            showMessage('✅ تم إنشاء الحساب بنجاح!', false);
-            setTimeout(() => {
-                window.location.href = 'https://mohamedemadmaxplas.github.io/nabd-wabsaite/';
-            }, 1500);
-        } catch (error) {
-            showMessage('حدث خطأ: ' + error.message, true);
-        }
+  async function completeRegistration() {
+    const email = tempUserData.username.split('@')[0] + '@examhub.com';
+    try {
+        const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
+        const firebaseUser = userCred.user;
+        const newUser = {
+            name: tempUserData.firstName + ' ' + tempUserData.lastName,
+            firstName: tempUserData.firstName,
+            lastName: tempUserData.lastName,
+            phone: tempUserData.phone,
+            username: tempUserData.username,
+            email: email,
+            password: tempUserData.password,
+            plan: 'free',
+            createdAt: new Date().toISOString()
+        };
+        await db.ref(`users/${firebaseUser.uid}`).set(newUser);
+        
+        // تسجيل الدخول تلقائياً
+        await auth.signInWithEmailAndPassword(email, tempUserData.password);
+        
+        // الحصول على رابط العودة
+        const returnUrl = getReturnUrl();
+        
+        showMessage('✅ تم إنشاء الحساب بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = returnUrl;
+        }, 2000);
+        
+    } catch (error) {
+        showMessage('حدث خطأ: ' + error.message, true);
+    }
+}
+    // ==================== الحصول على رابط العودة ====================
+function getReturnUrl() {
+    // 1. التحقق من وجود parameter في الرابط
+    const urlParams = new URLSearchParams(window.location.search);
+    let returnUrl = urlParams.get('returnUrl');
+    
+    // 2. إذا لم يوجد، التحقق من localStorage
+    if (!returnUrl) {
+        returnUrl = localStorage.getItem('tecno_return_url');
     }
     
+    // 3. إذا لم يوجد، التحقق من document.referrer (الموقع الذي جاء منه المستخدم)
+    if (!returnUrl && document.referrer) {
+        returnUrl = document.referrer;
+    }
+    
+    // 4. إذا لم يوجد، استخدم الموقع الافتراضي
+    if (!returnUrl) {
+        returnUrl = 'https://mohamedemadmaxplas.github.io/nabd-wabsaite/';
+    }
+    
+    return returnUrl;
+}
+async function tecnoLogin() {
+    const username = document.getElementById('tecnoUser')?.value.trim();
+    const password = document.getElementById('tecnoPass')?.value;
+    
+    if (!username || !password) {
+        showMessage('الرجاء إدخال اسم المستخدم وكلمة المرور', true);
+        return;
+    }
+    
+    let clean = username.includes('@') ? username : username + '@tecno.shark';
+    
+    try {
+        const snap = await db.ref('users').once('value');
+        let found = null;
+        let foundId = null;
+        
+        if (snap.val()) {
+            for (let id in snap.val()) {
+                if (snap.val()[id].username === clean) {
+                    found = snap.val()[id];
+                    foundId = id;
+                    break;
+                }
+            }
+        }
+        
+        if (!found || found.password !== password) {
+            showMessage('اسم المستخدم أو كلمة المرور غير صحيحة', true);
+            return;
+        }
+        
+        const email = clean.split('@')[0] + '@examhub.com';
+        
+        try {
+            await auth.signInWithEmailAndPassword(email, password);
+        } catch {
+            await auth.createUserWithEmailAndPassword(email, password);
+        }
+        
+        await db.ref(`users/${auth.currentUser.uid}`).set(found);
+        
+        // الحصول على رابط العودة
+        const returnUrl = getReturnUrl();
+        
+        showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = returnUrl;
+        }, 1500);
+        
+    } catch (error) {
+        console.error(error);
+        showMessage('حدث خطأ في تسجيل الدخول: ' + error.message, true);
+    }
+}
+// حفظ رابط العودة عند تحميل الصفحة
+localStorage.setItem('tecno_return_url', getReturnUrl());
     // ==================== بدء التشغيل ====================
     render();
 </script>

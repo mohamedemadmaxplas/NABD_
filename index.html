@@ -468,52 +468,56 @@
     }
     
     // ==================== دوال تسجيل الدخول ====================
-    async function checkIdentifier() {
-        const identifier = document.getElementById('loginIdentifier').value.trim();
+   async function checkIdentifier() {
+    const identifier = document.getElementById('loginIdentifier').value.trim();
+    
+    if (!identifier) {
+        showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
+        return;
+    }
+    
+    // معالجة اسم المستخدم: إزالة @tecno.shark إذا وجدت
+    let cleanIdentifier = identifier.replace(/@tecno\.shark$/i, '');
+    let fullIdentifier = cleanIdentifier + '@tecno.shark';
+    
+    try {
+        // البحث برقم الهاتف
+        const phoneSnapshot = await db.ref('users').orderByChild('phone').equalTo(identifier).once('value');
+        let foundUser = null;
+        let foundUid = null;
         
-        if (!identifier) {
-            showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
-            return;
+        if (phoneSnapshot.exists()) {
+            phoneSnapshot.forEach((child) => {
+                foundUser = child.val();
+                foundUid = child.key;
+            });
         }
         
-        try {
-            // استخدام استعلام مباشر بدلاً من قراءة كل المستخدمين
-            const usersSnapshot = await db.ref('users').orderByChild('username').equalTo(identifier).once('value');
-            let foundUser = null;
-            let foundUid = null;
-            
-            if (usersSnapshot.exists()) {
-                usersSnapshot.forEach((child) => {
+        // إذا لم يوجد برقم الهاتف، ابحث باسم المستخدم
+        if (!foundUser) {
+            const userSnapshot = await db.ref('users').orderByChild('username').equalTo(fullIdentifier).once('value');
+            if (userSnapshot.exists()) {
+                userSnapshot.forEach((child) => {
                     foundUser = child.val();
                     foundUid = child.key;
                 });
             }
-            
-            // إذا لم يوجد، ابحث برقم الهاتف
-            if (!foundUser) {
-                const phoneSnapshot = await db.ref('users').orderByChild('phone').equalTo(identifier).once('value');
-                if (phoneSnapshot.exists()) {
-                    phoneSnapshot.forEach((child) => {
-                        foundUser = child.val();
-                        foundUid = child.key;
-                    });
-                }
-            }
-            
-            if (!foundUser) {
-                showMessage('لا يوجد حساب بهذه البيانات', true);
-                return;
-            }
-            
-            resetUserData = { uid: foundUid, ...foundUser };
-            currentStep = 'reset';
-            render();
-            
-        } catch (error) {
-            console.error('خطأ في التحقق:', error);
-            showMessage('حدث خطأ في الاتصال بقاعدة البيانات', true);
         }
+        
+        if (!foundUser) {
+            showMessage('لا يوجد حساب بهذه البيانات', true);
+            return;
+        }
+        
+        resetUserData = { uid: foundUid, ...foundUser };
+        currentStep = 'reset';
+        render();
+        
+    } catch (error) {
+        console.error('خطأ في التحقق:', error);
+        showMessage('حدث خطأ في الاتصال بقاعدة البيانات', true);
     }
+}
     
     function goToLogin() {
         currentStep = 'login';
@@ -525,57 +529,63 @@
         render();
     }
     
-    async function tecnoLogin() {
-        let username = document.getElementById('tecnoUser')?.value.trim();
-        const password = document.getElementById('tecnoPass')?.value;
+    // ==================== دوال تسجيل الدخول ====================
+
+async function tecnoLogin() {
+    let username = document.getElementById('tecnoUser')?.value.trim();
+    const password = document.getElementById('tecnoPass')?.value;
+    
+    if (!username || !password) {
+        showMessage('الرجاء إدخال اسم المستخدم وكلمة المرور', true);
+        return;
+    }
+    
+    // إزالة @tecno.shark إذا كتبها المستخدم
+    let cleanUsername = username.replace(/@tecno\.shark$/i, '');
+    
+    // إضافة @tecno.shark تلقائياً
+    let fullUsername = cleanUsername + '@tecno.shark';
+    
+    const email = cleanUsername + '@tecno.com';
+    
+    try {
+        // البحث عن المستخدم
+        const userSnapshot = await db.ref('users').orderByChild('username').equalTo(fullUsername).once('value');
+        let found = null;
+        let foundUid = null;
         
-        if (!username || !password) {
-            showMessage('الرجاء إدخال اسم المستخدم وكلمة المرور', true);
+        if (userSnapshot.exists()) {
+            userSnapshot.forEach((child) => {
+                found = child.val();
+                foundUid = child.key;
+            });
+        }
+        
+        if (!found || found.password !== password) {
+            showMessage('اسم المستخدم أو كلمة المرور غير صحيحة', true);
             return;
         }
         
-        username = username.replace(/@tecno\.shark$/i, '');
-        let clean = username + '@tecno.shark';
-        const email = clean.split('@')[0] + '@tecno.com';
-        
         try {
-            // البحث عن المستخدم
-            const userSnapshot = await db.ref('users').orderByChild('username').equalTo(clean).once('value');
-            let found = null;
-            let foundUid = null;
-            
-            if (userSnapshot.exists()) {
-                userSnapshot.forEach((child) => {
-                    found = child.val();
-                    foundUid = child.key;
-                });
-            }
-            
-            if (!found || found.password !== password) {
-                showMessage('اسم المستخدم أو كلمة المرور غير صحيحة', true);
-                return;
-            }
-            
-            try {
-                await auth.signInWithEmailAndPassword(email, password);
-            } catch {
-                await auth.createUserWithEmailAndPassword(email, password);
-            }
-            
-            await db.ref(`users/${auth.currentUser.uid}`).set(found);
-            
-            const returnUrl = getReturnUrl();
-            showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
-            
-            setTimeout(() => {
-                window.location.href = returnUrl;
-            }, 1500);
-            
-        } catch (error) {
-            console.error(error);
-            showMessage('حدث خطأ في تسجيل الدخول: ' + error.message, true);
+            await auth.signInWithEmailAndPassword(email, password);
+        } catch {
+            await auth.createUserWithEmailAndPassword(email, password);
         }
+        
+        await db.ref(`users/${auth.currentUser.uid}`).set(found);
+        
+        const returnUrl = getReturnUrl();
+        showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = returnUrl;
+        }, 1500);
+        
+    } catch (error) {
+        console.error(error);
+        showMessage('حدث خطأ في تسجيل الدخول: ' + error.message, true);
     }
+}
     
     // ==================== دوال استعادة كلمة المرور ====================
     async function verifyPhone() {
@@ -855,249 +865,249 @@
     document.getElementById('langSwitch').addEventListener('click', switchLanguage);
     
     // ==================== عرض الصفحات ====================
-    function render() {
-        const app = document.getElementById('app');
-        const isAr = currentLang === 'ar';
+function render() {
+    const app = document.getElementById('app');
+    const isAr = currentLang === 'ar';
+    
+    if (currentStep === 'login') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'مرحباً بك' : 'Welcome Back'}</h1>
+                <p class="subtitle">${isAr ? 'سجل الدخول إلى حسابك' : 'Sign in to your account'}</p>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'رقم الهاتف أو اسم المستخدم' : 'Phone or Username'}</label>
+                    <input type="text" id="loginIdentifier">
+                </div>
+                <button class="next-btn" onclick="checkIdentifier()">${isAr ? 'التالي' : 'Next'}</button>
+                <div class="links">
+                    <a onclick="goToRegister()">${isAr ? 'إنشاء حساب جديد' : 'Create account'}</a>
+                    <a onclick="goToForgot()">${isAr ? 'نسيت كلمة المرور؟' : 'Forgot password?'}</a>
+                </div>
+            </div>
+        `;
+    }
+    else if (currentStep === 'forgot') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'استعادة كلمة المرور' : 'Reset Password'}</h1>
+                <p class="subtitle">${isAr ? 'أدخل رقم هاتفك المسجل' : 'Enter your phone number'}</p>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
+                    <input type="tel" id="forgotPhone">
+                </div>
+                <button class="next-btn" onclick="verifyPhone()">${isAr ? 'تحقق' : 'Verify'}</button>
+                <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
+            </div>
+        `;
+    }
+    else if (currentStep === 'reset') {
+        const maskedInfo = resetUserData ? maskUsername(resetUserData.username) : '';
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'إعادة تعيين كلمة المرور' : 'Reset Password'}</h1>
+                <p class="subtitle">${maskedInfo}</p>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'كلمة المرور الجديدة' : 'New Password'}</label>
+                    <input type="password" id="newPassword">
+                </div>
+                <div class="input-group">
+                    <label>${isAr ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
+                    <input type="password" id="confirmPassword">
+                </div>
+                <button class="next-btn" onclick="resetPassword()">${isAr ? 'إتمام' : 'Complete'}</button>
+                <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
+            </div>
+        `;
+    }
+    else if (currentStep === 'register-step1') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
+                <p class="subtitle">${isAr ? 'الخطوة 1 من 4: الاسم' : 'Step 1 of 4: Name'}</p>
+                <div class="step-indicator">
+                    <div class="step-dot active"></div>
+                    <div class="step-dot"></div>
+                    <div class="step-dot"></div>
+                    <div class="step-dot"></div>
+                </div>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'الاسم الأول' : 'First Name'}</label>
+                    <input type="text" id="firstName" value="${tempUserData.firstName}">
+                </div>
+                <div class="input-group">
+                    <label>${isAr ? 'الاسم الأخير' : 'Last Name'}</label>
+                    <input type="text" id="lastName" value="${tempUserData.lastName}">
+                </div>
+                <button class="next-btn" onclick="goToRegisterStep2()">${isAr ? 'التالي' : 'Next'}</button>
+                <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
+            </div>
+        `;
+    }
+    else if (currentStep === 'register-step2') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
+                <p class="subtitle">${isAr ? 'الخطوة 2 من 4: رقم الهاتف' : 'Step 2 of 4: Phone'}</p>
+                <div class="step-indicator">
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot active"></div>
+                    <div class="step-dot"></div>
+                    <div class="step-dot"></div>
+                </div>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
+                    <input type="tel" id="phone" value="${tempUserData.phone}">
+                </div>
+                <button class="next-btn" onclick="goToRegisterStep3()">${isAr ? 'التالي' : 'Next'}</button>
+                <button class="back-btn" onclick="goToRegisterStep1()">${isAr ? 'الرجوع' : 'Back'}</button>
+            </div>
+        `;
+    }
+    else if (currentStep === 'register-step3') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
+                <p class="subtitle">${isAr ? 'الخطوة 3 من 4: اسم المستخدم' : 'Step 3 of 4: Username'}</p>
+                <div class="step-indicator">
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot active"></div>
+                    <div class="step-dot"></div>
+                </div>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'اسم المستخدم' : 'Username'}</label>
+                    <div class="username-wrapper">
+                        <input type="text" id="username" value="${tempUserData.username.replace('@tecno.shark', '')}">
+                        <span class="username-suffix">@tecno.shark</span>
+                    </div>
+                </div>
+                <div id="usernameError" style="color: #dc2626; font-size: 12px; margin-top: 5px; display: none;"></div>
+                <div id="suggestions" class="suggestions"></div>
+                <button class="next-btn" id="nextBtn3" onclick="goToRegisterStep4()" disabled>${isAr ? 'التالي' : 'Next'}</button>
+                <button class="back-btn" onclick="goToRegisterStep2()">${isAr ? 'الرجوع' : 'Back'}</button>
+            </div>
+        `;
         
-        if (currentStep === 'login') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'مرحباً بك' : 'Welcome Back'}</h1>
-                    <p class="subtitle">${isAr ? 'سجل الدخول إلى حسابك' : 'Sign in to your account'}</p>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'رقم الهاتف أو اسم المستخدم' : 'Phone or Username'}</label>
-                        <input type="text" id="loginIdentifier" placeholder="${isAr ? 'مثال: 01144100018 أو username@tecno.shark' : 'e.g., 01144100018 or username@tecno.shark'}">
-                    </div>
-                    <button class="next-btn" onclick="checkIdentifier()">${isAr ? 'التالي' : 'Next'}</button>
-                    <div class="links">
-                        <a onclick="goToRegister()">${isAr ? 'إنشاء حساب جديد' : 'Create account'}</a>
-                        <a onclick="goToForgot()">${isAr ? 'نسيت كلمة المرور؟' : 'Forgot password?'}</a>
-                    </div>
-                </div>
-            `;
-        }
-        else if (currentStep === 'forgot') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'استعادة كلمة المرور' : 'Reset Password'}</h1>
-                    <p class="subtitle">${isAr ? 'أدخل رقم هاتفك المسجل' : 'Enter your phone number'}</p>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
-                        <input type="tel" id="forgotPhone" placeholder="${isAr ? 'مثال: 01144100018' : 'e.g., 01144100018'}">
-                    </div>
-                    <button class="next-btn" onclick="verifyPhone()">${isAr ? 'تحقق' : 'Verify'}</button>
-                    <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
-                </div>
-            `;
-        }
-        else if (currentStep === 'reset') {
-            const maskedInfo = resetUserData ? maskUsername(resetUserData.username) : '';
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'إعادة تعيين كلمة المرور' : 'Reset Password'}</h1>
-                    <p class="subtitle">${maskedInfo}</p>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'كلمة المرور الجديدة' : 'New Password'}</label>
-                        <input type="password" id="newPassword" placeholder="••••••••">
-                    </div>
-                    <div class="input-group">
-                        <label>${isAr ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
-                        <input type="password" id="confirmPassword" placeholder="••••••••">
-                    </div>
-                    <button class="next-btn" onclick="resetPassword()">${isAr ? 'إتمام' : 'Complete'}</button>
-                    <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
-                </div>
-            `;
-        }
-        else if (currentStep === 'register-step1') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
-                    <p class="subtitle">${isAr ? 'الخطوة 1 من 4: الاسم' : 'Step 1 of 4: Name'}</p>
-                    <div class="step-indicator">
-                        <div class="step-dot active"></div>
-                        <div class="step-dot"></div>
-                        <div class="step-dot"></div>
-                        <div class="step-dot"></div>
-                    </div>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'الاسم الأول' : 'First Name'}</label>
-                        <input type="text" id="firstName" value="${tempUserData.firstName}" placeholder="${isAr ? 'مثال: محمد' : 'e.g., Mohamed'}">
-                    </div>
-                    <div class="input-group">
-                        <label>${isAr ? 'الاسم الأخير' : 'Last Name'}</label>
-                        <input type="text" id="lastName" value="${tempUserData.lastName}" placeholder="${isAr ? 'مثال: عماد' : 'e.g., Emad'}">
-                    </div>
-                    <button class="next-btn" onclick="goToRegisterStep2()">${isAr ? 'التالي' : 'Next'}</button>
-                    <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
-                </div>
-            `;
-        }
-        else if (currentStep === 'register-step2') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
-                    <p class="subtitle">${isAr ? 'الخطوة 2 من 4: رقم الهاتف' : 'Step 2 of 4: Phone'}</p>
-                    <div class="step-indicator">
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot active"></div>
-                        <div class="step-dot"></div>
-                        <div class="step-dot"></div>
-                    </div>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
-                        <input type="tel" id="phone" value="${tempUserData.phone}" placeholder="${isAr ? 'مثال: 01144100018' : 'e.g., 01144100018'}">
-                    </div>
-                    <button class="next-btn" onclick="goToRegisterStep3()">${isAr ? 'التالي' : 'Next'}</button>
-                    <button class="back-btn" onclick="goToRegisterStep1()">${isAr ? 'الرجوع' : 'Back'}</button>
-                </div>
-            `;
-        }
-        else if (currentStep === 'register-step3') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
-                    <p class="subtitle">${isAr ? 'الخطوة 3 من 4: اسم المستخدم' : 'Step 3 of 4: Username'}</p>
-                    <div class="step-indicator">
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot active"></div>
-                        <div class="step-dot"></div>
-                    </div>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'اسم المستخدم' : 'Username'}</label>
-                        <div class="username-wrapper">
-                            <input type="text" id="username" value="${tempUserData.username.replace('@tecno.shark', '')}" placeholder="${isAr ? 'اسم المستخدم' : 'username'}">
-                            <span class="username-suffix">@tecno.shark</span>
-                        </div>
-                    </div>
-                    <div id="usernameError" style="color: #dc2626; font-size: 12px; margin-top: 5px; display: none;"></div>
-                    <div id="suggestions" class="suggestions"></div>
-                    <button class="next-btn" id="nextBtn3" onclick="goToRegisterStep4()" disabled>${isAr ? 'التالي' : 'Next'}</button>
-                    <button class="back-btn" onclick="goToRegisterStep2()">${isAr ? 'الرجوع' : 'Back'}</button>
-                </div>
-            `;
-            
-            const usernameInput = document.getElementById('username');
-            if (usernameInput) {
-                usernameInput.removeEventListener('input', checkUsernameAvailability);
-                usernameInput.addEventListener('input', checkUsernameAvailability);
-                checkUsernameAvailability();
-            }
-        }
-        else if (currentStep === 'register-step4') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
-                    <p class="subtitle">${isAr ? 'الخطوة 4 من 4: كلمة المرور' : 'Step 4 of 4: Password'}</p>
-                    <div class="step-indicator">
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot active"></div>
-                    </div>
-                    <div id="messageBox" class="message"></div>
-                    <div class="input-group">
-                        <label>${isAr ? 'كلمة المرور' : 'Password'}</label>
-                        <input type="password" id="password" placeholder="••••••••">
-                    </div>
-                    <div class="input-group">
-                        <label>${isAr ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
-                        <input type="password" id="confirmPassword" placeholder="••••••••">
-                    </div>
-                    <button class="next-btn" onclick="goToTerms()">${isAr ? 'التالي' : 'Next'}</button>
-                    <button class="back-btn" onclick="goToRegisterStep3()">${isAr ? 'الرجوع' : 'Back'}</button>
-                </div>
-            `;
-        }
-        else if (currentStep === 'register-terms') {
-            app.innerHTML = `
-                <div class="login-card">
-                    <div class="logo">
-                        <div class="logo-content">
-                            <div class="main-letter">TS</div>
-                            <div class="small-text">TECNO SHARK</div>
-                        </div>
-                    </div>
-                    <h1>${isAr ? 'الشروط والأحكام' : 'Terms & Conditions'}</h1>
-                    <p class="subtitle">${isAr ? 'الخطوة الأخيرة' : 'Final Step'}</p>
-                    <div class="step-indicator">
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot completed"></div>
-                        <div class="step-dot active"></div>
-                    </div>
-                    <div class="terms-box">
-                        <h3>📋 ${isAr ? 'شروط استخدام منصة تكنو شرك' : 'Tecno Shark Terms'}</h3>
-                        <p>1. ${isAr ? 'أوافق على معالجة بياناتي الشخصية وفقاً لسياسة الخصوصية.' : 'I agree to the processing of my personal data.'}</p>
-                        <p>2. ${isAr ? 'أتعهد بأن جميع البيانات المدخلة صحيحة ودقيقة.' : 'I certify that all entered data is correct.'}</p>
-                        <p>3. ${isAr ? 'أوافق على استلام الإشعارات عبر البريد الإلكتروني.' : 'I agree to receive email notifications.'}</p>
-                        <p>4. ${isAr ? 'أتحمل المسؤولية الكاملة عن الحفاظ على سرية حسابي.' : 'I am responsible for my account confidentiality.'}</p>
-                        <p>5. ${isAr ? 'أوافق على عدم استخدام المنصة لأغراض غير قانونية.' : 'I agree not to use the platform illegally.'}</p>
-                        <p>6. ${isAr ? 'يحق للمنصة إنهاء الحساب في حال مخالفة الشروط.' : 'Platform may terminate account upon violation.'}</p>
-                    </div>
-                    <button class="agree-btn" onclick="completeRegistration()">${isAr ? 'أوافق وأنشئ حسابي' : 'Agree & Create Account'}</button>
-                    <button class="back-btn" onclick="goToRegisterStep4()">${isAr ? 'الرجوع' : 'Back'}</button>
-                </div>
-            `;
-        }
-        
-        // إضافة Font Awesome إذا لم يكن موجوداً
-        if (!document.querySelector('link[href*="font-awesome"]')) {
-            const link = document.createElement('link');
-            link.rel = 'stylesheet';
-            link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css';
-            document.head.appendChild(link);
+        const usernameInput = document.getElementById('username');
+        if (usernameInput) {
+            usernameInput.removeEventListener('input', checkUsernameAvailability);
+            usernameInput.addEventListener('input', checkUsernameAvailability);
+            checkUsernameAvailability();
         }
     }
+    else if (currentStep === 'register-step4') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'إنشاء حساب' : 'Create Account'}</h1>
+                <p class="subtitle">${isAr ? 'الخطوة 4 من 4: كلمة المرور' : 'Step 4 of 4: Password'}</p>
+                <div class="step-indicator">
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot active"></div>
+                </div>
+                <div id="messageBox" class="message"></div>
+                <div class="input-group">
+                    <label>${isAr ? 'كلمة المرور' : 'Password'}</label>
+                    <input type="password" id="password">
+                </div>
+                <div class="input-group">
+                    <label>${isAr ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
+                    <input type="password" id="confirmPassword">
+                </div>
+                <button class="next-btn" onclick="goToTerms()">${isAr ? 'التالي' : 'Next'}</button>
+                <button class="back-btn" onclick="goToRegisterStep3()">${isAr ? 'الرجوع' : 'Back'}</button>
+            </div>
+        `;
+    }
+    else if (currentStep === 'register-terms') {
+        app.innerHTML = `
+            <div class="login-card">
+                <div class="logo">
+                    <div class="logo-content">
+                        <div class="main-letter">TS</div>
+                        <div class="small-text">TECNO SHARK</div>
+                    </div>
+                </div>
+                <h1>${isAr ? 'الشروط والأحكام' : 'Terms & Conditions'}</h1>
+                <p class="subtitle">${isAr ? 'الخطوة الأخيرة' : 'Final Step'}</p>
+                <div class="step-indicator">
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot completed"></div>
+                    <div class="step-dot active"></div>
+                </div>
+                <div class="terms-box">
+                    <h3>📋 ${isAr ? 'شروط استخدام منصة تكنو شرك' : 'Tecno Shark Terms'}</h3>
+                    <p>1. ${isAr ? 'أوافق على معالجة بياناتي الشخصية وفقاً لسياسة الخصوصية.' : 'I agree to the processing of my personal data.'}</p>
+                    <p>2. ${isAr ? 'أتعهد بأن جميع البيانات المدخلة صحيحة ودقيقة.' : 'I certify that all entered data is correct.'}</p>
+                    <p>3. ${isAr ? 'أوافق على استلام الإشعارات عبر البريد الإلكتروني.' : 'I agree to receive email notifications.'}</p>
+                    <p>4. ${isAr ? 'أتحمل المسؤولية الكاملة عن الحفاظ على سرية حسابي.' : 'I am responsible for my account confidentiality.'}</p>
+                    <p>5. ${isAr ? 'أوافق على عدم استخدام المنصة لأغراض غير قانونية.' : 'I agree not to use the platform illegally.'}</p>
+                    <p>6. ${isAr ? 'يحق للمنصة إنهاء الحساب في حال مخالفة الشروط.' : 'Platform may terminate account upon violation.'}</p>
+                </div>
+                <button class="agree-btn" onclick="completeRegistration()">${isAr ? 'أوافق وأنشئ حسابي' : 'Agree & Create Account'}</button>
+                <button class="back-btn" onclick="goToRegisterStep4()">${isAr ? 'الرجوع' : 'Back'}</button>
+            </div>
+        `;
+    }
+    
+    // إضافة Font Awesome إذا لم يكن موجوداً
+    if (!document.querySelector('link[href*="font-awesome"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css';
+        document.head.appendChild(link);
+    }
+}
     
     // ==================== بدء التشغيل ====================
     getReturnUrl();

@@ -467,8 +467,7 @@
         return returnUrl;
     }
     
-    // ==================== دوال تسجيل الدخول ====================
-  async function checkIdentifier() {
+   async function checkIdentifier() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
     
     if (!identifier) {
@@ -481,26 +480,38 @@
     let fullIdentifier = cleanIdentifier + '@tecno.shark';
     
     try {
-        // استخدام fetch بدلاً من orderByChild
-        const response = await fetch(`https://mindful-marking-493119-d0-default-rtdb.firebaseio.com/users.json`);
+        // تجربة طريقة مختلفة تماماً للوصول للبيانات
+        console.log('جاري محاولة قراءة البيانات...');
+        
+        // استخدام REST API مباشرة
+        const response = await fetch('https://mindful-marking-493119-d0-default-rtdb.firebaseio.com/users.json');
+        
+        if (!response.ok) {
+            throw new Error('فشل الاتصال بقاعدة البيانات');
+        }
+        
         const data = await response.json();
+        console.log('البيانات المستلمة:', data);
+        
+        if (!data) {
+            showMessage('لا يوجد حسابات مسجلة', true);
+            return;
+        }
         
         let foundUser = null;
         let foundUid = null;
         
-        if (data) {
-            for (let uid in data) {
-                const user = data[uid];
-                if (user.phone === identifier) {
-                    foundUser = user;
-                    foundUid = uid;
-                    break;
-                }
-                if (user.username === fullIdentifier) {
-                    foundUser = user;
-                    foundUid = uid;
-                    break;
-                }
+        for (let uid in data) {
+            const user = data[uid];
+            if (user.phone === identifier) {
+                foundUser = user;
+                foundUid = uid;
+                break;
+            }
+            if (user.username === fullIdentifier) {
+                foundUser = user;
+                foundUid = uid;
+                break;
             }
         }
         

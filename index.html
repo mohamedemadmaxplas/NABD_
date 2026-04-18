@@ -104,8 +104,12 @@
         }
         
         @keyframes shine {
-            0% { transform: translateX(-100%) rotate(45deg); }
-            100% { transform: translateX(100%) rotate(45deg); }
+            0% {
+                transform: translateX(-100%) rotate(45deg);
+            }
+            100% {
+                transform: translateX(100%) rotate(45deg);
+            }
         }
         
         .logo-content {
@@ -476,24 +480,28 @@
             return;
         }
         
+        // معالجة اسم المستخدم
+        let cleanIdentifier = identifier.replace(/@tecno\.shark$/i, '');
+        let fullIdentifier = cleanIdentifier + '@tecno.shark';
+        
         try {
-            // استخدام استعلام مباشر بدلاً من قراءة كل المستخدمين
-            const usersSnapshot = await db.ref('users').orderByChild('username').equalTo(identifier).once('value');
+            // البحث برقم الهاتف
+            const phoneSnapshot = await db.ref('users').orderByChild('phone').equalTo(identifier).once('value');
             let foundUser = null;
             let foundUid = null;
             
-            if (usersSnapshot.exists()) {
-                usersSnapshot.forEach((child) => {
+            if (phoneSnapshot.exists()) {
+                phoneSnapshot.forEach((child) => {
                     foundUser = child.val();
                     foundUid = child.key;
                 });
             }
             
-            // إذا لم يوجد، ابحث برقم الهاتف
+            // إذا لم يوجد برقم الهاتف، ابحث باسم المستخدم
             if (!foundUser) {
-                const phoneSnapshot = await db.ref('users').orderByChild('phone').equalTo(identifier).once('value');
-                if (phoneSnapshot.exists()) {
-                    phoneSnapshot.forEach((child) => {
+                const userSnapshot = await db.ref('users').orderByChild('username').equalTo(fullIdentifier).once('value');
+                if (userSnapshot.exists()) {
+                    userSnapshot.forEach((child) => {
                         foundUser = child.val();
                         foundUid = child.key;
                     });
@@ -534,13 +542,17 @@
             return;
         }
         
-        username = username.replace(/@tecno\.shark$/i, '');
-        let clean = username + '@tecno.shark';
-        const email = clean.split('@')[0] + '@tecno.com';
+        // إزالة @tecno.shark إذا كتبها المستخدم
+        let cleanUsername = username.replace(/@tecno\.shark$/i, '');
+        
+        // إضافة @tecno.shark تلقائياً
+        let fullUsername = cleanUsername + '@tecno.shark';
+        
+        const email = cleanUsername + '@tecno.com';
         
         try {
             // البحث عن المستخدم
-            const userSnapshot = await db.ref('users').orderByChild('username').equalTo(clean).once('value');
+            const userSnapshot = await db.ref('users').orderByChild('username').equalTo(fullUsername).once('value');
             let found = null;
             let foundUid = null;
             
@@ -804,7 +816,8 @@
     }
     
     async function completeRegistration() {
-        const email = tempUserData.username.split('@')[0] + '@tecno.com';
+        const cleanUsername = tempUserData.username.replace('@tecno.shark', '');
+        const email = cleanUsername + '@tecno.com';
         
         try {
             const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
@@ -873,7 +886,7 @@
                     <div id="messageBox" class="message"></div>
                     <div class="input-group">
                         <label>${isAr ? 'رقم الهاتف أو اسم المستخدم' : 'Phone or Username'}</label>
-                        <input type="text" id="loginIdentifier" placeholder="${isAr ? 'مثال: 01144100018 أو username@tecno.shark' : 'e.g., 01144100018 or username@tecno.shark'}">
+                        <input type="text" id="loginIdentifier">
                     </div>
                     <button class="next-btn" onclick="checkIdentifier()">${isAr ? 'التالي' : 'Next'}</button>
                     <div class="links">
@@ -897,7 +910,7 @@
                     <div id="messageBox" class="message"></div>
                     <div class="input-group">
                         <label>${isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
-                        <input type="tel" id="forgotPhone" placeholder="${isAr ? 'مثال: 01144100018' : 'e.g., 01144100018'}">
+                        <input type="tel" id="forgotPhone">
                     </div>
                     <button class="next-btn" onclick="verifyPhone()">${isAr ? 'تحقق' : 'Verify'}</button>
                     <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
@@ -919,11 +932,11 @@
                     <div id="messageBox" class="message"></div>
                     <div class="input-group">
                         <label>${isAr ? 'كلمة المرور الجديدة' : 'New Password'}</label>
-                        <input type="password" id="newPassword" placeholder="••••••••">
+                        <input type="password" id="newPassword">
                     </div>
                     <div class="input-group">
                         <label>${isAr ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
-                        <input type="password" id="confirmPassword" placeholder="••••••••">
+                        <input type="password" id="confirmPassword">
                     </div>
                     <button class="next-btn" onclick="resetPassword()">${isAr ? 'إتمام' : 'Complete'}</button>
                     <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
@@ -950,11 +963,11 @@
                     <div id="messageBox" class="message"></div>
                     <div class="input-group">
                         <label>${isAr ? 'الاسم الأول' : 'First Name'}</label>
-                        <input type="text" id="firstName" value="${tempUserData.firstName}" placeholder="${isAr ? 'مثال: محمد' : 'e.g., Mohamed'}">
+                        <input type="text" id="firstName" value="${tempUserData.firstName}">
                     </div>
                     <div class="input-group">
                         <label>${isAr ? 'الاسم الأخير' : 'Last Name'}</label>
-                        <input type="text" id="lastName" value="${tempUserData.lastName}" placeholder="${isAr ? 'مثال: عماد' : 'e.g., Emad'}">
+                        <input type="text" id="lastName" value="${tempUserData.lastName}">
                     </div>
                     <button class="next-btn" onclick="goToRegisterStep2()">${isAr ? 'التالي' : 'Next'}</button>
                     <button class="back-btn" onclick="goToLogin()">${isAr ? 'العودة' : 'Back'}</button>
@@ -981,7 +994,7 @@
                     <div id="messageBox" class="message"></div>
                     <div class="input-group">
                         <label>${isAr ? 'رقم الهاتف' : 'Phone Number'}</label>
-                        <input type="tel" id="phone" value="${tempUserData.phone}" placeholder="${isAr ? 'مثال: 01144100018' : 'e.g., 01144100018'}">
+                        <input type="tel" id="phone" value="${tempUserData.phone}">
                     </div>
                     <button class="next-btn" onclick="goToRegisterStep3()">${isAr ? 'التالي' : 'Next'}</button>
                     <button class="back-btn" onclick="goToRegisterStep1()">${isAr ? 'الرجوع' : 'Back'}</button>
@@ -1009,7 +1022,7 @@
                     <div class="input-group">
                         <label>${isAr ? 'اسم المستخدم' : 'Username'}</label>
                         <div class="username-wrapper">
-                            <input type="text" id="username" value="${tempUserData.username.replace('@tecno.shark', '')}" placeholder="${isAr ? 'اسم المستخدم' : 'username'}">
+                            <input type="text" id="username" value="${tempUserData.username.replace('@tecno.shark', '')}">
                             <span class="username-suffix">@tecno.shark</span>
                         </div>
                     </div>
@@ -1047,11 +1060,11 @@
                     <div id="messageBox" class="message"></div>
                     <div class="input-group">
                         <label>${isAr ? 'كلمة المرور' : 'Password'}</label>
-                        <input type="password" id="password" placeholder="••••••••">
+                        <input type="password" id="password">
                     </div>
                     <div class="input-group">
                         <label>${isAr ? 'تأكيد كلمة المرور' : 'Confirm Password'}</label>
-                        <input type="password" id="confirmPassword" placeholder="••••••••">
+                        <input type="password" id="confirmPassword">
                     </div>
                     <button class="next-btn" onclick="goToTerms()">${isAr ? 'التالي' : 'Next'}</button>
                     <button class="back-btn" onclick="goToRegisterStep3()">${isAr ? 'الرجوع' : 'Back'}</button>

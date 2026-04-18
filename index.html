@@ -468,7 +468,7 @@
     }
     
     // ==================== دوال تسجيل الدخول ====================
-   async function checkIdentifier() {
+  async function checkIdentifier() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
     
     if (!identifier) {
@@ -476,31 +476,31 @@
         return;
     }
     
-    // معالجة اسم المستخدم: إزالة @tecno.shark إذا وجدت
+    // معالجة اسم المستخدم
     let cleanIdentifier = identifier.replace(/@tecno\.shark$/i, '');
     let fullIdentifier = cleanIdentifier + '@tecno.shark';
     
     try {
-        // البحث برقم الهاتف
-        const phoneSnapshot = await db.ref('users').orderByChild('phone').equalTo(identifier).once('value');
+        // استخدام fetch بدلاً من orderByChild
+        const response = await fetch(`https://mindful-marking-493119-d0-default-rtdb.firebaseio.com/users.json`);
+        const data = await response.json();
+        
         let foundUser = null;
         let foundUid = null;
         
-        if (phoneSnapshot.exists()) {
-            phoneSnapshot.forEach((child) => {
-                foundUser = child.val();
-                foundUid = child.key;
-            });
-        }
-        
-        // إذا لم يوجد برقم الهاتف، ابحث باسم المستخدم
-        if (!foundUser) {
-            const userSnapshot = await db.ref('users').orderByChild('username').equalTo(fullIdentifier).once('value');
-            if (userSnapshot.exists()) {
-                userSnapshot.forEach((child) => {
-                    foundUser = child.val();
-                    foundUid = child.key;
-                });
+        if (data) {
+            for (let uid in data) {
+                const user = data[uid];
+                if (user.phone === identifier) {
+                    foundUser = user;
+                    foundUid = uid;
+                    break;
+                }
+                if (user.username === fullIdentifier) {
+                    foundUser = user;
+                    foundUid = uid;
+                    break;
+                }
             }
         }
         
@@ -515,7 +515,7 @@
         
     } catch (error) {
         console.error('خطأ في التحقق:', error);
-        showMessage('حدث خطأ في الاتصال بقاعدة البيانات', true);
+        showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
     }
 }
     

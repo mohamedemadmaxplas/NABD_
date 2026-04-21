@@ -468,8 +468,7 @@
         return returnUrl;
     }
     
-    // ==================== دالة التحقق من الهوية (المصححة) ====================
-   // ==================== دالة التحقق من الهوية (المصححة بالكامل) ====================
+  // ==================== دالة التحقق من الهوية (باستخدام Firebase SDK) ====================
 async function checkIdentifier() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
     
@@ -484,15 +483,9 @@ async function checkIdentifier() {
     try {
         console.log('جاري البحث عن المستخدم...');
         
-        // ✅ التصحيح: استخدام قاعدة البيانات الصحيحة
-        const response = await fetch('https://imtihan-494010-default-rtdb.firebaseio.com/users.json');
-        
-        if (!response.ok) {
-            throw new Error('فشل الاتصال بقاعدة البيانات');
-        }
-        
-        const data = await response.json();
-        console.log('البيانات المستلمة:', data);
+        // ✅ استخدام Firebase SDK بدلاً من fetch
+        const usersSnapshot = await db.ref('users').once('value');
+        const data = usersSnapshot.val();
         
         if (!data) {
             showMessage('لا يوجد حسابات مسجلة', true);

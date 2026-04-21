@@ -469,74 +469,75 @@
     }
     
     // ==================== دالة التحقق من الهوية (المصححة) ====================
-    async function checkIdentifier() {
-        const identifier = document.getElementById('loginIdentifier').value.trim();
+   // ==================== دالة التحقق من الهوية (المصححة بالكامل) ====================
+async function checkIdentifier() {
+    const identifier = document.getElementById('loginIdentifier').value.trim();
+    
+    if (!identifier) {
+        showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
+        return;
+    }
+    
+    let cleanIdentifier = identifier.replace(/@tecno\.shark$/i, '');
+    let fullIdentifier = cleanIdentifier + '@tecno.shark';
+    
+    try {
+        console.log('جاري البحث عن المستخدم...');
         
-        if (!identifier) {
-            showMessage('الرجاء إدخال رقم الهاتف أو اسم المستخدم', true);
+        // ✅ التصحيح: استخدام قاعدة البيانات الصحيحة
+        const response = await fetch('https://imtihan-494010-default-rtdb.firebaseio.com/users.json');
+        
+        if (!response.ok) {
+            throw new Error('فشل الاتصال بقاعدة البيانات');
+        }
+        
+        const data = await response.json();
+        console.log('البيانات المستلمة:', data);
+        
+        if (!data) {
+            showMessage('لا يوجد حسابات مسجلة', true);
             return;
         }
         
-        let cleanIdentifier = identifier.replace(/@tecno\.shark$/i, '');
-        let fullIdentifier = cleanIdentifier + '@tecno.shark';
+        let foundUser = null;
+        let foundUid = null;
         
-        try {
-            console.log('جاري البحث عن المستخدم...');
-            
-            const response = await fetch('https://tecno-shark-default-rtdb.firebaseio.com/users.json');
-            
-            if (!response.ok) {
-                throw new Error('فشل الاتصال بقاعدة البيانات');
+        for (let uid in data) {
+            const user = data[uid];
+            if (user.phone === identifier) {
+                foundUser = user;
+                foundUid = uid;
+                break;
             }
-            
-            const data = await response.json();
-            console.log('البيانات المستلمة:', data);
-            
-            if (!data) {
-                showMessage('لا يوجد حسابات مسجلة', true);
-                return;
+            if (user.username === fullIdentifier) {
+                foundUser = user;
+                foundUid = uid;
+                break;
             }
-            
-            let foundUser = null;
-            let foundUid = null;
-            
-            for (let uid in data) {
-                const user = data[uid];
-                if (user.phone === identifier) {
-                    foundUser = user;
-                    foundUid = uid;
-                    break;
-                }
-                if (user.username === fullIdentifier) {
-                    foundUser = user;
-                    foundUid = uid;
-                    break;
-                }
-            }
-            
-            if (!foundUser) {
-                showMessage('لا يوجد حساب بهذه البيانات. يرجى إنشاء حساب جديد', true);
-                return;
-            }
-            
-            // تخزين بيانات المستخدم والانتقال إلى صفحة إدخال كلمة المرور
-            tempUserData = {
-                uid: foundUid,
-                username: foundUser.username,
-                phone: foundUser.phone,
-                name: foundUser.name,
-                firstName: foundUser.firstName || '',
-                lastName: foundUser.lastName || ''
-            };
-            
-            currentStep = 'password-login';
-            render();
-            
-        } catch (error) {
-            console.error('خطأ في التحقق:', error);
-            showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
         }
+        
+        if (!foundUser) {
+            showMessage('لا يوجد حساب بهذه البيانات. يرجى إنشاء حساب جديد', true);
+            return;
+        }
+        
+        tempUserData = {
+            uid: foundUid,
+            username: foundUser.username,
+            phone: foundUser.phone,
+            name: foundUser.name,
+            firstName: foundUser.firstName || '',
+            lastName: foundUser.lastName || ''
+        };
+        
+        currentStep = 'password-login';
+        render();
+        
+    } catch (error) {
+        console.error('خطأ في التحقق:', error);
+        showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
     }
+}
     
     // ==================== دالة إتمام تسجيل الدخول ====================
   async function completeLogin() {

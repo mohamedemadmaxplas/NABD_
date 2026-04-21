@@ -398,16 +398,15 @@
 
 <script>
     // ==================== إعدادات Firebase (المحدثة) ====================
-    const firebaseConfig = {
-        apiKey: "AIzaSyDLndo0o-Bf67Sw8_n84pM-__ErB3SuTx4",
-        authDomain: "tecno-shark.firebaseapp.com",
-        databaseURL: "https://tecno-shark-default-rtdb.firebaseio.com",
-        projectId: "tecno-shark",
-        storageBucket: "tecno-shark.firebasestorage.app",
-        messagingSenderId: "536495831614",
-        appId: "1:536495831614:web:e113969218666828496f6f",
-        measurementId: "G-ECZYM05D0S"
-    };
+   const firebaseConfig = {
+    apiKey: "AIzaSyD-atJ2hlfbAWqIaHuBgNASArZmVS6PhA0",
+    authDomain: "imtihan-494010.firebaseapp.com",
+    projectId: "imtihan-494010",
+    storageBucket: "imtihan-494010.firebasestorage.app",
+    messagingSenderId: "764038463015",
+    appId: "1:764038463015:web:e57dbfcf55ac393435d802",
+    measurementId: "G-2LT9PJNZK7"
+};
     
     firebase.initializeApp(firebaseConfig);
     const auth = firebase.auth();
@@ -848,74 +847,79 @@
         render();
     }
     
-    async function completeRegistration() {
-        const email = tempUserData.username.split('@')[0] + '@tecno.com';
+   async function completeRegistration() {
+    const email = tempUserData.username.split('@')[0] + '@tecno.com';
+    
+    showMessage('جاري إنشاء الحساب...', false);
+    
+    try {
+        let firebaseUser = null;
         
-        showMessage('جاري إنشاء الحساب...', false);
-        
+        // محاولة إنشاء حساب في Authentication
         try {
-            let firebaseUser = null;
-            
-            try {
+            const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
+            firebaseUser = userCred.user;
+            console.log('✅ تم إنشاء حساب جديد في Authentication');
+        } catch (createError) {
+            // إذا كان الحساب موجوداً، حاول تسجيل الدخول
+            if (createError.code === 'auth/email-already-in-use') {
                 const userCred = await auth.signInWithEmailAndPassword(email, tempUserData.password);
                 firebaseUser = userCred.user;
-            } catch (signInError) {
-                if (signInError.code === 'auth/user-not-found') {
-                    const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
-                    firebaseUser = userCred.user;
-                } else {
-                    throw signInError;
-                }
-            }
-            
-            const userSnapshot = await db.ref(`users/${firebaseUser.uid}`).once('value');
-            
-            if (!userSnapshot.exists()) {
-                const newUser = {
-                    name: tempUserData.firstName + ' ' + tempUserData.lastName,
-                    firstName: tempUserData.firstName,
-                    lastName: tempUserData.lastName,
-                    phone: tempUserData.phone,
-                    username: tempUserData.username,
-                    email: email,
-                    password: tempUserData.password,
-                    plan: 'free',
-                    createdAt: new Date().toISOString()
-                };
-                
-                await db.ref(`users/${firebaseUser.uid}`).set(newUser);
-            }
-            
-            await auth.signInWithEmailAndPassword(email, tempUserData.password);
-            
-            localStorage.setItem('tecno_user', JSON.stringify({
-                uid: firebaseUser.uid,
-                username: tempUserData.username,
-                name: tempUserData.firstName + ' ' + tempUserData.lastName,
-                loggedIn: true
-            }));
-            
-            const returnUrl = getReturnUrl();
-            showMessage('✅ تم إنشاء الحساب بنجاح! جاري التحويل...', false);
-            
-            setTimeout(() => {
-                window.location.href = returnUrl;
-            }, 2000);
-            
-        } catch (error) {
-            console.error(error);
-            
-            if (error.code === 'auth/email-already-in-use') {
-                showMessage('⚠️ هذا البريد الإلكتروني مستخدم بالفعل. يرجى تسجيل الدخول', true);
-                setTimeout(() => {
-                    currentStep = 'login';
-                    render();
-                }, 3000);
+                console.log('✅ تم تسجيل الدخول بحساب موجود');
             } else {
-                showMessage('❌ حدث خطأ: ' + error.message, true);
+                throw createError;
             }
         }
+        
+        // حفظ بيانات المستخدم في Realtime Database
+        const newUser = {
+            name: tempUserData.firstName + ' ' + tempUserData.lastName,
+            firstName: tempUserData.firstName,
+            lastName: tempUserData.lastName,
+            phone: tempUserData.phone,
+            username: tempUserData.username,
+            email: email,
+            password: tempUserData.password,
+            plan: 'free',
+            authUid: firebaseUser.uid,
+            createdAt: new Date().toISOString()
+        };
+        
+        await db.ref(`users/${firebaseUser.uid}`).set(newUser);
+        
+        // إنشاء رمز تسجيل الدخول للموقع الرئيسي
+        const loginToken = {
+            uid: firebaseUser.uid,
+            username: tempUserData.username,
+            email: email,
+            name: newUser.name,
+            plan: 'free',
+            timestamp: Date.now(),
+            expires: Date.now() + (1000 * 60 * 60)
+        };
+        
+        const encodedToken = btoa(JSON.stringify(loginToken));
+        const returnUrl = "https://imtihan-eight.vercel.app";
+        const finalUrl = `${returnUrl}?token=${encodedToken}`;
+        
+        showMessage('✅ تم إنشاء الحساب بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = finalUrl;
+        }, 2000);
+        
+    } catch (error) {
+        console.error('خطأ في إنشاء الحساب:', error);
+        
+        if (error.code === 'auth/email-already-in-use') {
+            showMessage('⚠️ هذا البريد الإلكتروني مستخدم بالفعل', true);
+        } else if (error.code === 'auth/weak-password') {
+            showMessage('⚠️ كلمة المرور ضعيفة (6 أحرف على الأقل)', true);
+        } else {
+            showMessage('❌ حدث خطأ: ' + error.message, true);
+        }
     }
+}
     
     // ==================== الترجمة ====================
     function switchLanguage() {

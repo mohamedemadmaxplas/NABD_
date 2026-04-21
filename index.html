@@ -540,66 +540,74 @@
     }
     
     // ==================== دالة إتمام تسجيل الدخول ====================
-    async function completeLogin() {
-        const password = document.getElementById('loginPassword')?.value;
-        
-        if (!password) {
-            showMessage('الرجاء إدخال كلمة المرور', true);
-            return;
-        }
-        
-        if (!tempUserData.uid) {
-            showMessage('حدث خطأ، يرجى المحاولة مرة أخرى', true);
-            return;
-        }
-        
-        try {
-            const userSnapshot = await db.ref(`users/${tempUserData.uid}`).once('value');
-            const userData = userSnapshot.val();
-            
-            if (!userData) {
-                showMessage('بيانات المستخدم غير موجودة', true);
-                return;
-            }
-            
-            if (userData.password !== password) {
-                showMessage('كلمة المرور غير صحيحة', true);
-                return;
-            }
-            
-            const email = userData.username.split('@')[0] + '@tecno.com';
-            
-            try {
-                await auth.signInWithEmailAndPassword(email, password);
-            } catch (authError) {
-                if (authError.code === 'auth/user-not-found') {
-                    await auth.createUserWithEmailAndPassword(email, password);
-                } else {
-                    throw authError;
-                }
-            }
-            
-            await db.ref(`users/${tempUserData.uid}/lastLogin`).set(new Date().toISOString());
-            
-            localStorage.setItem('tecno_user', JSON.stringify({
-                uid: tempUserData.uid,
-                username: userData.username,
-                name: userData.name,
-                loggedIn: true
-            }));
-            
-            const returnUrl = getReturnUrl();
-            showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
-            
-            setTimeout(() => {
-                window.location.href = returnUrl;
-            }, 1500);
-            
-        } catch (error) {
-            console.error(error);
-            showMessage('حدث خطأ في تسجيل الدخول: ' + error.message, true);
-        }
+  async function completeLogin() {
+    const password = document.getElementById('loginPassword')?.value;
+    
+    if (!password) {
+        showMessage('الرجاء إدخال كلمة المرور', true);
+        return;
     }
+    
+    if (!tempUserData.uid) {
+        showMessage('حدث خطأ، يرجى المحاولة مرة أخرى', true);
+        return;
+    }
+    
+    try {
+        const userSnapshot = await db.ref(`users/${tempUserData.uid}`).once('value');
+        const userData = userSnapshot.val();
+        
+        if (!userData) {
+            showMessage('بيانات المستخدم غير موجودة', true);
+            return;
+        }
+        
+        if (userData.password !== password) {
+            showMessage('كلمة المرور غير صحيحة', true);
+            return;
+        }
+        
+        const email = userData.username.split('@')[0] + '@tecno.com';
+        
+        // محاولة تسجيل الدخول إلى Firebase Authentication
+        try {
+            await auth.signInWithEmailAndPassword(email, password);
+        } catch (authError) {
+            if (authError.code === 'auth/user-not-found') {
+                await auth.createUserWithEmailAndPassword(email, password);
+            } else {
+                throw authError;
+            }
+        }
+        
+        // إنشاء رمز تسجيل الدخول للموقع الرئيسي
+        const loginToken = {
+            uid: tempUserData.uid,
+            username: userData.username,
+            email: email,
+            name: userData.name,
+            plan: userData.plan || 'free',
+            timestamp: Date.now(),
+            expires: Date.now() + (1000 * 60 * 60) // صلاحية ساعة واحدة
+        };
+        
+        const encodedToken = btoa(JSON.stringify(loginToken));
+        
+        // الرابط الأساسي (موقع Imtihan)
+        const returnUrl = "https://imtihan-eight.vercel.app";
+        const finalUrl = `${returnUrl}?token=${encodedToken}`;
+        
+        showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = finalUrl;
+        }, 1500);
+        
+    } catch (error) {
+        console.error('خطأ:', error);
+        showMessage('حدث خطأ: ' + error.message, true);
+    }
+}
     
     function goToLogin() {
         currentStep = 'login';

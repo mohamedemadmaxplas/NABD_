@@ -633,50 +633,45 @@
     }
     
     async function resetPassword() {
-        const newPass = document.getElementById('newPassword').value;
-        const confirmPass = document.getElementById('confirmPassword').value;
-        
-        if (!newPass || !confirmPass) {
-            showMessage('الرجاء إدخال كلمة المرور', true);
-            return;
-        }
-        
-        if (newPass !== confirmPass) {
-            showMessage('كلمة المرور غير متطابقة', true);
-            return;
-        }
-        
-        if (newPass.length < 6) {
-            showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
-            return;
-        }
-        
-        if (!resetUserData) {
-            showMessage('حدث خطأ، حاول مرة أخرى', true);
-            return;
-        }
-        
-        try {
-            await db.ref(`users/${resetUserData.uid}/password`).set(newPass);
-            
-            const email = resetUserData.username.split('@')[0] + '@tecno.com';
-            try {
-                await auth.signInWithEmailAndPassword(email, newPass);
-            } catch {
-                await auth.createUserWithEmailAndPassword(email, newPass);
-            }
-            
-            const returnUrl = getReturnUrl();
-            showMessage('✅ تم تغيير كلمة المرور بنجاح! جاري التحويل...', false);
-            
-            setTimeout(() => {
-                window.location.href = returnUrl;
-            }, 1500);
-            
-        } catch (error) {
-            showMessage('حدث خطأ', true);
-        }
+    const newPass = document.getElementById('newPassword').value;
+    const confirmPass = document.getElementById('confirmPassword').value;
+    
+    if (!newPass || !confirmPass) {
+        showMessage('الرجاء إدخال كلمة المرور', true);
+        return;
     }
+    
+    if (newPass !== confirmPass) {
+        showMessage('كلمة المرور غير متطابقة', true);
+        return;
+    }
+    
+    if (newPass.length < 6) {
+        showMessage('كلمة المرور يجب أن تكون 6 أحرف على الأقل', true);
+        return;
+    }
+    
+    if (!resetUserData) {
+        showMessage('حدث خطأ، حاول مرة أخرى', true);
+        return;
+    }
+    
+    try {
+        // ✅ فقط تحديث كلمة المرور في قاعدة البيانات
+        await db.ref(`users/${resetUserData.uid}/profile/password`).set(newPass);
+        
+        const returnUrl = getReturnUrl();
+        showMessage('✅ تم تغيير كلمة المرور بنجاح! جاري التحويل...', false);
+        
+        setTimeout(() => {
+            window.location.href = returnUrl;
+        }, 1500);
+        
+    } catch (error) {
+        console.error('خطأ:', error);
+        showMessage('حدث خطأ: ' + error.message, true);
+    }
+}
     
     // ==================== دوال إنشاء حساب ====================
     function goToRegister() {

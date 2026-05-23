@@ -532,8 +532,7 @@ async function checkIdentifier() {
     }
 }
     
-    // ==================== دالة إتمام تسجيل الدخول ====================
-  async function completeLogin() {
+    async function completeLogin() {
     const password = document.getElementById('loginPassword')?.value;
     
     if (!password) {
@@ -560,33 +559,18 @@ async function checkIdentifier() {
             return;
         }
         
-        const email = userData.username.split('@')[0] + '@tecno.com';
-        
-        // محاولة تسجيل الدخول إلى Firebase Authentication
-        try {
-            await auth.signInWithEmailAndPassword(email, password);
-        } catch (authError) {
-            if (authError.code === 'auth/user-not-found') {
-                await auth.createUserWithEmailAndPassword(email, password);
-            } else {
-                throw authError;
-            }
-        }
-        
         // إنشاء رمز تسجيل الدخول للموقع الرئيسي
         const loginToken = {
             uid: tempUserData.uid,
             username: userData.username,
-            email: email,
+            email: userData.email,
             name: userData.name,
             plan: userData.plan || 'free',
             timestamp: Date.now(),
-            expires: Date.now() + (1000 * 60 * 60) // صلاحية ساعة واحدة
+            expires: Date.now() + (1000 * 60 * 60)
         };
         
         const encodedToken = btoa(JSON.stringify(loginToken));
-        
-        // الرابط الأساسي (موقع Imtihan)
         const returnUrl = "https://imtihan-eight.vercel.app";
         const finalUrl = `${returnUrl}?token=${encodedToken}`;
         
@@ -841,31 +825,16 @@ async function checkIdentifier() {
         render();
     }
     
-   async function completeRegistration() {
+  async function completeRegistration() {
     const email = tempUserData.username.split('@')[0] + '@tecno.com';
     
     showMessage('جاري إنشاء الحساب...', false);
     
     try {
-        let firebaseUser = null;
+        // إنشاء معرف فريد جديد
+        const newUid = Date.now().toString() + Math.random().toString(36).substr(2, 9);
         
-        // محاولة إنشاء حساب في Authentication
-        try {
-            const userCred = await auth.createUserWithEmailAndPassword(email, tempUserData.password);
-            firebaseUser = userCred.user;
-            console.log('✅ تم إنشاء حساب جديد في Authentication');
-        } catch (createError) {
-            // إذا كان الحساب موجوداً، حاول تسجيل الدخول
-            if (createError.code === 'auth/email-already-in-use') {
-                const userCred = await auth.signInWithEmailAndPassword(email, tempUserData.password);
-                firebaseUser = userCred.user;
-                console.log('✅ تم تسجيل الدخول بحساب موجود');
-            } else {
-                throw createError;
-            }
-        }
-        
-        // حفظ بيانات المستخدم في Realtime Database
+        // حفظ بيانات المستخدم في Realtime Database فقط
         const newUser = {
             name: tempUserData.firstName + ' ' + tempUserData.lastName,
             firstName: tempUserData.firstName,
@@ -875,15 +844,14 @@ async function checkIdentifier() {
             email: email,
             password: tempUserData.password,
             plan: 'free',
-            authUid: firebaseUser.uid,
             createdAt: new Date().toISOString()
         };
         
-        await db.ref(`users/${firebaseUser.uid}`).set(newUser);
+        await db.ref(`users/${newUid}`).set(newUser);
         
         // إنشاء رمز تسجيل الدخول للموقع الرئيسي
         const loginToken = {
-            uid: firebaseUser.uid,
+            uid: newUid,
             username: tempUserData.username,
             email: email,
             name: newUser.name,
@@ -904,14 +872,7 @@ async function checkIdentifier() {
         
     } catch (error) {
         console.error('خطأ في إنشاء الحساب:', error);
-        
-        if (error.code === 'auth/email-already-in-use') {
-            showMessage('⚠️ هذا البريد الإلكتروني مستخدم بالفعل', true);
-        } else if (error.code === 'auth/weak-password') {
-            showMessage('⚠️ كلمة المرور ضعيفة (6 أحرف على الأقل)', true);
-        } else {
-            showMessage('❌ حدث خطأ: ' + error.message, true);
-        }
+        showMessage('❌ حدث خطأ: ' + error.message, true);
     }
 }
     

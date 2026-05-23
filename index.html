@@ -397,15 +397,14 @@
 <div id="toast" class="toast"></div>
 
 <script>
-    // ==================== FIREBASE CONFIGURATION ====================
-       const firebaseConfig = {
-  apiKey: "AIzaSyAs3U2941_rNArLPpCYjKM9yAVQtiK-oDw",
-  authDomain: "nabd-store-1.firebaseapp.com",
-  databaseURL: "https://nabd-store-1-default-rtdb.firebaseio.com",
-  projectId: "nabd-store-1",
-  storageBucket: "nabd-store-1.firebasestorage.app",
-  messagingSenderId: "132078192935",
-  appId: "1:132078192935:web:2d4bc9e0dfcb407b2a8102"
+     const firebaseConfig = {
+  apiKey: "AIzaSyD-atJ2hlfbAWqIaHuBgNASArZmVS6PhA0",
+  authDomain: "imtihan-494010.firebaseapp.com",
+  projectId: "imtihan-494010",
+  storageBucket: "imtihan-494010.firebasestorage.app",
+  messagingSenderId: "764038463015",
+  appId: "1:764038463015:web:e57dbfcf55ac393435d802",
+  measurementId: "G-2LT9PJNZK7"
 };
     
     firebase.initializeApp(firebaseConfig);
@@ -433,7 +432,48 @@
         toast.classList.add('show');
         setTimeout(() => toast.classList.remove('show'), 3000);
     }
-    
+    // ==================== دالة مساعدة لجلب بيانات المستخدم بشكل موحد ====================
+async function getUserProfile(uid) {
+    try {
+        // أولاً: محاولة القراءة من الهيكل الجديد (users/uid/profile)
+        const profileSnapshot = await db.ref(`users/${uid}/profile`).once('value');
+        if (profileSnapshot.exists()) {
+            const profile = profileSnapshot.val();
+            return {
+                uid: uid,
+                name: profile.name || '',
+                username: profile.username || '',
+                email: profile.email || '',
+                phone: profile.phone || '',
+                password: profile.password || '',
+                plan: profile.plan || 'free',
+                address: profile.address || '',
+                createdAt: profile.createdAt || new Date().toISOString()
+            };
+        }
+        
+        // ثانياً: محاولة القراءة من الهيكل القديم (users/uid مباشرة)
+        const userSnapshot = await db.ref(`users/${uid}`).once('value');
+        if (userSnapshot.exists()) {
+            const userData = userSnapshot.val();
+            return {
+                uid: uid,
+                name: userData.name || userData.profileName || '',
+                username: userData.username || '',
+                email: userData.email || '',
+                phone: userData.phone || '',
+                password: userData.password || '',
+                plan: userData.plan || 'free',
+                createdAt: userData.createdAt || new Date().toISOString()
+            };
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('خطأ في جلب بيانات المستخدم:', error);
+        return null;
+    }
+}
     function showMessage(msg, isError) {
         const box = document.getElementById('messageBox');
         if (box) {
@@ -556,7 +596,7 @@ async function checkIdentifier() {
     }
 }
     
-   async function completeLogin() {
+  async function completeLogin() {
     const password = document.getElementById('loginPassword')?.value;
     
     if (!password) {
@@ -605,7 +645,9 @@ async function checkIdentifier() {
         };
         
         const encodedToken = btoa(JSON.stringify(loginToken));
-        const returnUrl = "https://nabd-ten.vercel.app";
+        
+        // ✅ تم التعديل هنا ✅
+        const returnUrl = "https://imtihan-eight.vercel.app/";
         const finalUrl = `${returnUrl}?token=${encodedToken}`;
         
         showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);
@@ -1000,7 +1042,9 @@ function useSuggestion(suggestion) {
         };
         
         const encodedToken = btoa(JSON.stringify(loginToken));
-        const returnUrl = "https://imtihan-eight.vercel.app";
+        
+        // ✅ تم التعديل هنا ✅
+        const returnUrl = "https://imtihan-eight.vercel.app/";
         const finalUrl = `${returnUrl}?token=${encodedToken}`;
         
         showMessage('✅ تم إنشاء الحساب بنجاح! جاري التحويل...', false);

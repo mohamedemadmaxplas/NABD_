@@ -468,7 +468,7 @@
         return returnUrl;
     }
     
-  async function checkIdentifier() {
+ async function checkIdentifier() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
     
     if (!identifier) {
@@ -476,34 +476,62 @@
         return;
     }
     
-    let cleanIdentifier = identifier.replace(/@tecno\.shark$/i, '');
-    let fullIdentifier = cleanIdentifier + '@tecno.shark';
-    
     try {
-        const usersSnapshot = await db.ref('users').once('value');
-        const data = usersSnapshot.val();
-        
-        if (!data) {
-            showMessage('لا يوجد حسابات مسجلة', true);
-            return;
-        }
-        
         let foundUser = null;
         let foundUid = null;
         
-        for (let uid in data) {
-            // البحث في المسار الصحيح (users/uid/profile)
-            const userProfile = data[uid].profile;
-            if (userProfile) {
-                if (userProfile.phone === identifier) {
-                    foundUser = userProfile;
-                    foundUid = uid;
-                    break;
-                }
-                if (userProfile.username === fullIdentifier) {
-                    foundUser = userProfile;
-                    foundUid = uid;
-                    break;
+        // 🔥 أولاً: البحث في Firebase Authentication
+        try {
+            // محاولة البحث عن المستخدم في Authentication
+            const userCredential = await auth.signInWithEmailAndPassword(identifier, "temp_check");
+            // إذا نجح، معناه أن البريد الإلكتروني موجود في Authentication
+            foundUser = {
+                uid: userCredential.user.uid,
+                username: identifier.split('@')[0] + '@tecno.shark',
+                email: identifier,
+                name: userCredential.user.displayName || identifier.split('@')[0],
+                phone: ''
+            };
+            foundUid = userCredential.user.uid;
+            
+            // حفظ المستخدم في Realtime Database إذا لم يكن موجوداً
+            const userSnapshot = await db.ref(`users/${foundUid}/profile`).once('value');
+            if (!userSnapshot.exists()) {
+                await db.ref(`users/${foundUid}/profile`).set({
+                    name: foundUser.name,
+                    username: foundUser.username,
+                    email: foundUser.email,
+                    phone: '',
+                    address: '',
+                    createdAt: new Date().toISOString()
+                });
+            }
+            
+        } catch (authError) {
+            // إذا لم يجد في Authentication، ابحث في Realtime Database
+            const usersSnapshot = await db.ref('users').once('value');
+            const data = usersSnapshot.val();
+            
+            if (data) {
+                for (let uid in data) {
+                    const userProfile = data[uid].profile;
+                    if (userProfile) {
+                        if (userProfile.phone === identifier) {
+                            foundUser = userProfile;
+                            foundUid = uid;
+                            break;
+                        }
+                        if (userProfile.username === identifier || userProfile.username === identifier + '@tecno.shark') {
+                            foundUser = userProfile;
+                            foundUid = uid;
+                            break;
+                        }
+                        if (userProfile.email === identifier) {
+                            foundUser = userProfile;
+                            foundUid = uid;
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -518,6 +546,7 @@
             username: foundUser.username,
             phone: foundUser.phone,
             name: foundUser.name,
+            email: foundUser.email,
             firstName: foundUser.firstName || '',
             lastName: foundUser.lastName || ''
         };
@@ -531,7 +560,7 @@
     }
 }
     
-    async function completeLogin() {
+   async function completeLogin() {
     const password = document.getElementById('loginPassword')?.value;
     
     if (!password) {
@@ -545,32 +574,42 @@
     }
     
     try {
-        const userSnapshot = await db.ref(`users/${tempUserData.uid}`).once('value');
-        const userData = userSnapshot.val();
+        let isValidPassword = false;
         
-        if (!userData) {
-            showMessage('بيانات المستخدم غير موجودة', true);
-            return;
+        // 🔥 أولاً: محاولة التحقق من كلمة المرور في Authentication
+        try {
+            const email = tempUserData.email || tempUserData.username.split('@')[0] + '@tecno.com';
+            await auth.signInWithEmailAndPassword(email, password);
+            isValidPassword = true;
+        } catch (authError) {
+            // إذا فشل، تحقق من Realtime Database
+            const userSnapshot = await db.ref(`users/${tempUserData.uid}`).once('value');
+            const userData = userSnapshot.val();
+            const storedPassword = userData?.profile?.password || userData?.password;
+            
+            if (storedPassword && storedPassword === password) {
+                isValidPassword = true;
+            }
         }
         
-        if (userData.password !== password) {
+        if (!isValidPassword) {
             showMessage('كلمة المرور غير صحيحة', true);
             return;
         }
         
-        // إنشاء رمز تسجيل الدخول للموقع الرئيسي
+        // إنشاء رمز تسجيل الدخول
         const loginToken = {
             uid: tempUserData.uid,
-            username: userData.username,
-            email: userData.email,
-            name: userData.name,
-            plan: userData.plan || 'free',
+            username: tempUserData.username,
+            email: tempUserData.email || tempUserData.username.split('@')[0] + '@tecno.com',
+            name: tempUserData.name,
+            plan: 'free',
             timestamp: Date.now(),
             expires: Date.now() + (1000 * 60 * 60)
         };
         
         const encodedToken = btoa(JSON.stringify(loginToken));
-        const returnUrl = "https://imtihan-eight.vercel.app";
+        const returnUrl = "https://nabd-ten.vercel.app";
         const finalUrl = `${returnUrl}?token=${encodedToken}`;
         
         showMessage('✅ تم تسجيل الدخول بنجاح! جاري التحويل...', false);

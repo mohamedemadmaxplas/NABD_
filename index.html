@@ -468,7 +468,7 @@
         return returnUrl;
     }
     
- async function checkIdentifier() {
+async function checkIdentifier() {
     const identifier = document.getElementById('loginIdentifier').value.trim();
     
     if (!identifier) {
@@ -476,87 +476,83 @@
         return;
     }
     
+    // 🔥 تشغيل التشخيص أولاً
+    console.log('\n🔍 بدء تشخيص تسجيل الدخول...\n');
+    const diagnosis = await diagnoseLoginIssue(identifier);
+    
+    if (!diagnosis.found) {
+        // إذا لم يتم العثور على المستخدم، عرض رسالة مفصلة
+        showMessage(`❌ لا يوجد حساب بهذه البيانات. ${diagnosis.locations.length === 0 ? 'تأكد من كتابة المعرف بشكل صحيح' : ''}`, true);
+        return;
+    }
+    
+    // إذا تم العثور على المستخدم، تابع كالمعتاد
     try {
         let foundUser = null;
         let foundUid = null;
         
-        // 🔥 أولاً: البحث في Firebase Authentication
-        try {
-            // محاولة البحث عن المستخدم في Authentication
-            const userCredential = await auth.signInWithEmailAndPassword(identifier, "temp_check");
-            // إذا نجح، معناه أن البريد الإلكتروني موجود في Authentication
+        // استخراج بيانات المستخدم من أول موقع تم العثور عليه
+        const firstLocation = diagnosis.locations[0];
+        
+        if (firstLocation.location.includes('profile')) {
+            foundUser = firstLocation.data;
+            foundUid = firstLocation.uid;
+        } else if (firstLocation.location === 'users_simple') {
+            foundUser = firstLocation.data;
+            foundUid = firstLocation.uid;
+        } else if (firstLocation.location === 'Firebase Authentication') {
+            // إذا كان فقط في Authentication، نحتاج إلى إنشاء سجل في Database
+            const email = identifier;
+            const username = email.split('@')[0] + '@tecno.shark';
+            const newUid = 'auth_' + Date.now();
+            
             foundUser = {
-                uid: userCredential.user.uid,
-                username: identifier.split('@')[0] + '@tecno.shark',
-                email: identifier,
-                name: userCredential.user.displayName || identifier.split('@')[0],
+                username: username,
+                email: email,
+                name: email.split('@')[0],
                 phone: ''
             };
-            foundUid = userCredential.user.uid;
+            foundUid = newUid;
             
-            // حفظ المستخدم في Realtime Database إذا لم يكن موجوداً
-            const userSnapshot = await db.ref(`users/${foundUid}/profile`).once('value');
-            if (!userSnapshot.exists()) {
-                await db.ref(`users/${foundUid}/profile`).set({
-                    name: foundUser.name,
-                    username: foundUser.username,
-                    email: foundUser.email,
-                    phone: '',
-                    address: '',
-                    createdAt: new Date().toISOString()
-                });
-            }
-            
-        } catch (authError) {
-            // إذا لم يجد في Authentication، ابحث في Realtime Database
-            const usersSnapshot = await db.ref('users').once('value');
-            const data = usersSnapshot.val();
-            
-            if (data) {
-                for (let uid in data) {
-                    const userProfile = data[uid].profile;
-                    if (userProfile) {
-                        if (userProfile.phone === identifier) {
-                            foundUser = userProfile;
-                            foundUid = uid;
-                            break;
-                        }
-                        if (userProfile.username === identifier || userProfile.username === identifier + '@tecno.shark') {
-                            foundUser = userProfile;
-                            foundUid = uid;
-                            break;
-                        }
-                        if (userProfile.email === identifier) {
-                            foundUser = userProfile;
-                            foundUid = uid;
-                            break;
-                        }
-                    }
-                }
-            }
+            // حفظ في Database
+            await db.ref(`users/${newUid}/profile`).set({
+                name: foundUser.name,
+                username: foundUser.username,
+                email: foundUser.email,
+                phone: '',
+                address: '',
+                createdAt: new Date().toISOString()
+            });
+            console.log(`✅ تم إنشاء سجل للمستخدم في Database (UID: ${newUid})`);
         }
         
         if (!foundUser) {
-            showMessage('لا يوجد حساب بهذه البيانات. يرجى إنشاء حساب جديد', true);
+            showMessage('حدث خطأ في استرجاع بيانات المستخدم', true);
             return;
         }
         
         tempUserData = {
             uid: foundUid,
             username: foundUser.username,
-            phone: foundUser.phone,
+            phone: foundUser.phone || '',
             name: foundUser.name,
             email: foundUser.email,
             firstName: foundUser.firstName || '',
             lastName: foundUser.lastName || ''
         };
         
+        console.log('✅ تم تحميل بيانات المستخدم بنجاح:', {
+            uid: tempUserData.uid,
+            username: tempUserData.username,
+            name: tempUserData.name
+        });
+        
         currentStep = 'password-login';
         render();
         
     } catch (error) {
-        console.error('خطأ في التحقق:', error);
-        showMessage('حدث خطأ في الاتصال بقاعدة البيانات: ' + error.message, true);
+        console.error('❌ خطأ في معالجة بيانات المستخدم:', error);
+        showMessage('حدث خطأ: ' + error.message, true);
     }
 }
     
@@ -757,56 +753,158 @@
         render();
     }
     
-    async function checkUsernameAvailability() {
-        const usernameInput = document.getElementById('username');
-        if (!usernameInput) return;
-        
-        const username = usernameInput.value.trim();
-        const errorDiv = document.getElementById('usernameError');
-        const nextBtn = document.getElementById('nextBtn3');
-        const suggestionsDiv = document.getElementById('suggestions');
-        
-        if (!username || username.length < 3) {
-            if (errorDiv) errorDiv.style.display = 'none';
-            if (nextBtn) nextBtn.disabled = true;
-            if (suggestionsDiv) suggestionsDiv.innerHTML = '';
-            return;
+   async function checkUsernameAvailability() {
+    const usernameInput = document.getElementById('username');
+    if (!usernameInput) return;
+    
+    const username = usernameInput.value.trim();
+    const errorDiv = document.getElementById('usernameError');
+    const nextBtn = document.getElementById('nextBtn3');
+    const suggestionsDiv = document.getElementById('suggestions');
+    
+    // التحقق من أن username لا يحتوي على @ أو مسافات
+    if (username.includes('@')) {
+        if (errorDiv) {
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = '⚠️ لا تدخل @ تلقائياً سيتم إضافتها';
+            errorDiv.style.color = '#dc2626';
         }
-        
-        try {
-            const fullUsername = username + '@tecno.shark';
-            const userSnapshot = await db.ref('users').orderByChild('username').equalTo(fullUsername).once('value');
-            const exists = userSnapshot.exists();
-            
-            if (exists) {
-                if (errorDiv) {
-                    errorDiv.style.display = 'block';
-                    errorDiv.textContent = '⚠️ اسم المستخدم موجود بالفعل';
-                }
-                if (nextBtn) nextBtn.disabled = true;
-                
-                const suggestions = [
-                    username + Math.floor(Math.random() * 100),
-                    username + '_' + Math.floor(Math.random() * 1000),
-                    username + new Date().getFullYear(),
-                    username + '_official'
-                ];
-                
-                if (suggestionsDiv) {
-                    suggestionsDiv.innerHTML = suggestions.map(s => 
-                        `<span class="suggestion-badge" onclick="useSuggestion('${s}')">${s}@tecno.shark</span>`
-                    ).join('');
-                }
-            } else {
-                if (errorDiv) errorDiv.style.display = 'none';
-                if (nextBtn) nextBtn.disabled = false;
-                if (suggestionsDiv) suggestionsDiv.innerHTML = '';
-            }
-        } catch (error) {
-            console.error('خطأ في التحقق:', error);
-            if (nextBtn) nextBtn.disabled = false;
-        }
+        if (nextBtn) nextBtn.disabled = true;
+        return;
     }
+    
+    if (!username || username.length < 3) {
+        if (errorDiv) errorDiv.style.display = 'none';
+        if (nextBtn) nextBtn.disabled = true;
+        if (suggestionsDiv) suggestionsDiv.innerHTML = '';
+        console.log('⚠️ اسم المستخدم قصير جداً (3 أحرف على الأقل)');
+        return;
+    }
+    
+    // التحقق من أن اسم المستخدم يحتوي على أحرف وأرقام فقط
+    const validChars = /^[a-zA-Z0-9_]+$/;
+    if (!validChars.test(username)) {
+        if (errorDiv) {
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = '⚠️ اسم المستخدم يجب أن يحتوي على أحرف إنجليزية وأرقام فقط';
+            errorDiv.style.color = '#dc2626';
+        }
+        if (nextBtn) nextBtn.disabled = true;
+        if (suggestionsDiv) suggestionsDiv.innerHTML = '';
+        return;
+    }
+    
+    try {
+        const fullUsername = username + '@tecno.shark';
+        console.log(`🔍 جاري التحقق من اسم المستخدم: ${fullUsername}`);
+        
+        // البحث في Realtime Database
+        const usersSnapshot = await db.ref('users').once('value');
+        const data = usersSnapshot.val();
+        
+        let exists = false;
+        
+        if (data) {
+            for (let uid in data) {
+                const userProfile = data[uid].profile;
+                if (userProfile && userProfile.username === fullUsername) {
+                    exists = true;
+                    console.log(`❌ اسم المستخدم ${fullUsername} موجود بالفعل`);
+                    break;
+                }
+            }
+        }
+        
+        // أيضاً البحث في Firebase Authentication
+        if (!exists) {
+            try {
+                const email = username + '@tecno.com';
+                const signInMethods = await auth.fetchSignInMethodsForEmail(email);
+                if (signInMethods.length > 0) {
+                    exists = true;
+                    console.log(`❌ البريد الإلكتروني ${email} موجود بالفعل في Authentication`);
+                }
+            } catch (authError) {
+                console.log('ℹ️ لم نتمكن من التحقق من Authentication:', authError.message);
+            }
+        }
+        
+        if (exists) {
+            // عرض رسالة الخطأ
+            if (errorDiv) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = '⚠️ اسم المستخدم موجود بالفعل';
+                errorDiv.style.color = '#dc2626';
+            }
+            if (nextBtn) nextBtn.disabled = true;
+            
+            // إنشاء اقتراحات بديلة
+            const suggestions = [];
+            
+            // إضافة رقم عشوائي
+            suggestions.push(username + Math.floor(Math.random() * 100));
+            
+            // إضافة شرطة سفلية ورقم
+            suggestions.push(username + '_' + Math.floor(Math.random() * 1000));
+            
+            // إضافة سنة
+            suggestions.push(username + new Date().getFullYear());
+            
+            // إضافة كلمة official
+            suggestions.push(username + '_official');
+            
+            // إضافة حرف عشوائي
+            const letters = 'abcdefghijklmnopqrstuvwxyz';
+            suggestions.push(username + letters[Math.floor(Math.random() * letters.length)]);
+            
+            // إزالة الاقتراحات المكررة
+            const uniqueSuggestions = [...new Set(suggestions)];
+            
+            // عرض الاقتراحات
+            if (suggestionsDiv) {
+                suggestionsDiv.innerHTML = uniqueSuggestions.map(s => 
+                    `<span class="suggestion-badge" onclick="useSuggestion('${s}')">${s}@tecno.shark</span>`
+                ).join('');
+                console.log(`📝 تم إنشاء ${uniqueSuggestions.length} اقتراح:`, uniqueSuggestions);
+            }
+            
+        } else {
+            // اسم المستخدم متاح
+            if (errorDiv) {
+                errorDiv.style.display = 'block';
+                errorDiv.textContent = '✅ اسم المستخدم متاح';
+                errorDiv.style.color = '#10b981';
+            }
+            if (nextBtn) nextBtn.disabled = false;
+            if (suggestionsDiv) suggestionsDiv.innerHTML = '';
+            console.log(`✅ اسم المستخدم ${fullUsername} متاح`);
+        }
+        
+    } catch (error) {
+        console.error('❌ خطأ في التحقق:', error);
+        if (errorDiv) {
+            errorDiv.style.display = 'block';
+            errorDiv.textContent = '⚠️ حدث خطأ في التحقق من اسم المستخدم';
+            errorDiv.style.color = '#dc2626';
+        }
+        if (nextBtn) nextBtn.disabled = false;
+    }
+}
+// دالة لاستخدام الاقتراح (تأكد من وجودها)
+function useSuggestion(suggestion) {
+    const usernameInput = document.getElementById('username');
+    if (usernameInput) {
+        // استخراج اسم المستخدم بدون @tecno.shark
+        let cleanSuggestion = suggestion;
+        if (cleanSuggestion.includes('@')) {
+            cleanSuggestion = cleanSuggestion.split('@')[0];
+        }
+        usernameInput.value = cleanSuggestion;
+        console.log(`📝 تم اختيار الاقتراح: ${cleanSuggestion}`);
+        // إعادة التحقق من التوفر
+        checkUsernameAvailability();
+    }
+}
     
     function useSuggestion(suggestion) {
         const usernameInput = document.getElementById('username');
@@ -1118,7 +1216,7 @@
                         </div>
                     </div>
                     <div id="usernameError" style="color: #dc2626; font-size: 12px; margin-top: 5px; display: none;"></div>
-                    <div id="suggestions" class="suggestions"></div>
+<div id="suggestions" class="suggestions"></div>
                     <button class="next-btn" id="nextBtn3" onclick="goToRegisterStep4()" disabled>${isAr ? 'التالي' : 'Next'}</button>
                     <button class="back-btn" onclick="goToRegisterStep2()">${isAr ? 'الرجوع' : 'Back'}</button>
                 </div>
@@ -1194,7 +1292,155 @@
             `;
         }
     }
+    // ==================== دالة تشخيص متقدمة لتسجيل الدخول ====================
+async function diagnoseLoginIssue(identifier) {
+    console.group('🔬 تشخيص مشكلة تسجيل الدخول');
+    console.log(`🔍 المعرف المدخل: "${identifier}"`);
+    console.log(`📝 نوع المعرف: ${identifier.includes('@') ? 'بريد إلكتروني' : (isNaN(identifier) ? 'اسم مستخدم' : 'رقم هاتف')}`);
     
+    const results = {
+        found: false,
+        locations: [],
+        errors: []
+    };
+    
+    // 1. البحث في Realtime Database (مسار users)
+    try {
+        console.log('📂 1. البحث في Realtime Database (/users)...');
+        const usersSnapshot = await db.ref('users').once('value');
+        const data = usersSnapshot.val();
+        
+        if (data) {
+            let userCount = 0;
+            for (let uid in data) {
+                userCount++;
+                const userProfile = data[uid].profile;
+                if (userProfile) {
+                    // التحقق من تطابق رقم الهاتف
+                    if (userProfile.phone === identifier) {
+                        results.found = true;
+                        results.locations.push({ location: 'users/*/profile.phone', uid: uid, data: userProfile });
+                        console.log(`✅ ✅ ✅ تم العثور على المستخدم عبر رقم الهاتف في المسار: users/${uid}/profile.phone`);
+                    }
+                    // التحقق من تطابق اسم المستخدم
+                    if (userProfile.username === identifier || userProfile.username === identifier + '@tecno.shark') {
+                        results.found = true;
+                        results.locations.push({ location: 'users/*/profile.username', uid: uid, data: userProfile });
+                        console.log(`✅ ✅ ✅ تم العثور على المستخدم عبر اسم المستخدم في المسار: users/${uid}/profile.username`);
+                    }
+                    // التحقق من تطابق البريد الإلكتروني
+                    if (userProfile.email === identifier) {
+                        results.found = true;
+                        results.locations.push({ location: 'users/*/profile.email', uid: uid, data: userProfile });
+                        console.log(`✅ ✅ ✅ تم العثور على المستخدم عبر البريد الإلكتروني في المسار: users/${uid}/profile.email`);
+                    }
+                }
+            }
+            console.log(`📊 إجمالي المستخدمين في قاعدة البيانات: ${userCount}`);
+        } else {
+            console.log('⚠️ لا توجد بيانات في مسار /users');
+            results.errors.push('users path is empty');
+        }
+    } catch (error) {
+        console.error('❌ خطأ في قراءة /users:', error);
+        results.errors.push(`Database read error: ${error.message}`);
+    }
+    
+    // 2. البحث في مسار users_simple (إذا وجد)
+    try {
+        console.log('📂 2. البحث في Realtime Database (/users_simple)...');
+        const simpleSnapshot = await db.ref('users_simple').once('value');
+        const simpleData = simpleSnapshot.val();
+        
+        if (simpleData) {
+            for (let uid in simpleData) {
+                const user = simpleData[uid];
+                if (user && (user.username === identifier || user.username === identifier + '@tecno.shark' || user.phone === identifier || user.email === identifier)) {
+                    results.found = true;
+                    results.locations.push({ location: 'users_simple', uid: uid, data: user });
+                    console.log(`✅ ✅ ✅ تم العثور على المستخدم في مسار users_simple`);
+                }
+            }
+        } else {
+            console.log('ℹ️ مسار users_simple غير موجود أو فارغ');
+        }
+    } catch (error) {
+        console.log(`⚠️ خطأ في قراءة users_simple: ${error.message}`);
+    }
+    
+    // 3. البحث في Firebase Authentication
+    try {
+        console.log('📂 3. البحث في Firebase Authentication...');
+        if (identifier.includes('@')) {
+            const signInMethods = await auth.fetchSignInMethodsForEmail(identifier);
+            if (signInMethods.length > 0) {
+                results.found = true;
+                results.locations.push({ location: 'Firebase Authentication', email: identifier });
+                console.log(`✅ ✅ ✅ تم العثور على البريد الإلكتروني في Firebase Authentication`);
+                console.log(`📋 طرق تسجيل الدخول المتاحة: ${signInMethods.join(', ')}`);
+            } else {
+                console.log(`ℹ️ البريد الإلكتروني ${identifier} غير موجود في Firebase Authentication`);
+            }
+        } else {
+            console.log(`ℹ️ "${identifier}" ليس بريداً إلكترونياً، تخطي البحث في Authentication`);
+        }
+    } catch (error) {
+        console.log(`⚠️ خطأ في البحث في Authentication: ${error.message}`);
+        results.errors.push(`Auth error: ${error.message}`);
+    }
+    
+    // 4. التحقق من بنية البيانات (structure)
+    console.log('📂 4. التحقق من بنية البيانات...');
+    try {
+        const structureSnapshot = await db.ref('users').limitToFirst(1).once('value');
+        const sample = structureSnapshot.val();
+        if (sample) {
+            const firstUid = Object.keys(sample)[0];
+            const firstUser = sample[firstUid];
+            console.log(`📋 مثال على بنية المستخدم الأول (UID: ${firstUid}):`);
+            console.log(JSON.stringify(firstUser, null, 2));
+            
+            // التحقق من وجود profile
+            if (firstUser.profile) {
+                console.log('✅ بنية البيانات صحيحة (تحتوي على profile)');
+            } else if (firstUser.username || firstUser.name) {
+                console.log('⚠️ بنية البيانات قديمة! البيانات موجودة مباشرة بدون profile');
+                results.errors.push('Data structure error: missing "profile" object - old structure detected');
+            } else {
+                console.log('⚠️ بنية البيانات غير معروفة');
+            }
+        } else {
+            console.log('ℹ️ لا توجد بيانات لعرض بنية مثال');
+        }
+    } catch (error) {
+        console.log(`⚠️ خطأ في فحص البنية: ${error.message}`);
+    }
+    
+    // 5. عرض التقرير النهائي
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    if (results.found) {
+        console.log(`✅ ✅ ✅ النتيجة: تم العثور على المستخدم! ✅ ✅ ✅`);
+        console.log(`📍 المواقع التي تم العثور فيها:`);
+        results.locations.forEach(loc => {
+            console.log(`   - ${loc.location} (UID: ${loc.uid || 'N/A'})`);
+        });
+    } else {
+        console.log(`❌ ❌ ❌ النتيجة: لم يتم العثور على المستخدم! ❌ ❌ ❌`);
+        if (results.errors.length > 0) {
+            console.log(`⚠️ الأخطاء المسجلة:`);
+            results.errors.forEach(err => console.log(`   - ${err}`));
+        }
+        console.log(`💡 اقتراحات:`);
+        console.log(`   1. تأكد من كتابة المعرف بشكل صحيح (حساس لحالة الأحرف)`);
+        console.log(`   2. إذا كان بريداً إلكترونياً، تأكد من صيغته (مثال: user@tecno.com)`);
+        console.log(`   3. إذا كان اسم مستخدم، تأكد من أنه ينتهي بـ @tecno.shark`);
+        console.log(`   4. تحقق من بنية البيانات في Firebase Console`);
+    }
+    console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    console.groupEnd();
+    
+    return results;
+}
     // ==================== بدء التشغيل ====================
     getReturnUrl();
     render();

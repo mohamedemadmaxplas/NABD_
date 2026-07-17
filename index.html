@@ -612,20 +612,13 @@ async function checkIdentifier() {
     try {
         let isValidPassword = false;
         
-        // 🔥 أولاً: محاولة التحقق من كلمة المرور في Authentication
-        try {
-            const email = tempUserData.email || tempUserData.username.split('@')[0] + '@tecno.com';
-            await auth.signInWithEmailAndPassword(email, password);
+        // التحقق من كلمة المرور في Realtime Database
+        const userSnapshot = await db.ref(`users/${tempUserData.uid}/profile`).once('value');
+        const userData = userSnapshot.val();
+        const storedPassword = userData?.password;
+        
+        if (storedPassword && storedPassword === password) {
             isValidPassword = true;
-        } catch (authError) {
-            // إذا فشل، تحقق من Realtime Database
-            const userSnapshot = await db.ref(`users/${tempUserData.uid}`).once('value');
-            const userData = userSnapshot.val();
-            const storedPassword = userData?.profile?.password || userData?.password;
-            
-            if (storedPassword && storedPassword === password) {
-                isValidPassword = true;
-            }
         }
         
         if (!isValidPassword) {
@@ -633,20 +626,28 @@ async function checkIdentifier() {
             return;
         }
         
-        // إنشاء رمز تسجيل الدخول
+        // ✅ إنشاء رمز تسجيل الدخول مع كلمة المرور
         const loginToken = {
             uid: tempUserData.uid,
             username: tempUserData.username,
             email: tempUserData.email || tempUserData.username.split('@')[0] + '@tecno.com',
             name: tempUserData.name,
             plan: 'free',
+            password: password,  // ✅ مهم جداً عشان تسجيل الدخول
             timestamp: Date.now(),
-            expires: Date.now() + (1000 * 60 * 60)
+            expires: Date.now() + (1000 * 60 * 60)  // ساعة واحدة
         };
         
         const encodedToken = btoa(JSON.stringify(loginToken));
         
-        // ✅ تم التعديل هنا ✅
+        // ✅ حفظ البيانات في localStorage
+        localStorage.setItem('user_uid', tempUserData.uid);
+        localStorage.setItem('user_name', tempUserData.name);
+        localStorage.setItem('user_username', tempUserData.username);
+        localStorage.setItem('user_email', loginToken.email);
+        localStorage.setItem('user_password', password);
+        localStorage.setItem('user_plan', 'free');
+        
         const returnUrl = "https://imtihan-eight.vercel.app/";
         const finalUrl = `${returnUrl}?token=${encodedToken}`;
         
